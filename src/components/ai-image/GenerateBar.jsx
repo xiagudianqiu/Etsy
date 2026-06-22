@@ -2,13 +2,40 @@ import { useState, useRef } from 'react';
 import { Sparkles, Loader2, Image as ImageIcon, X, Upload, AlertCircle, Download, RefreshCw, ChevronUp, ChevronDown } from 'lucide-react';
 import { generateImage, fillPrompt } from '../../utils/evolinkApi';
 
-const SIZE_PRESETS = [
-  { value: '1024x1024', label: '1:1 方形', w: 1024, h: 1024 },
-  { value: '1536x1024', label: '3:2 横', w: 1536, h: 1024 },
-  { value: '1024x1536', label: '2:3 竖', w: 1024, h: 1536 },
-  { value: '1792x1024', label: '16:9 宽屏', w: 1792, h: 1024 },
-  { value: '1024x1792', label: '9:16 竖屏', w: 1024, h: 1792 }
+const RESOLUTION_PRESETS = [
+  { value: '1K', label: '1K', longEdge: 1024 },
+  { value: '2K', label: '2K', longEdge: 2048 },
+  { value: '4K', label: '4K', longEdge: 4096 }
 ];
+
+const ASPECT_RATIOS = [
+  { value: '1:1', w: 1, h: 1 },
+  { value: '16:9', w: 16, h: 9 },
+  { value: '9:16', w: 9, h: 16 },
+  { value: '4:3', w: 4, h: 3 },
+  { value: '3:4', w: 3, h: 4 },
+  { value: '3:2', w: 3, h: 2 },
+  { value: '2:3', w: 2, h: 3 },
+  { value: '5:4', w: 5, h: 4 },
+  { value: '4:5', w: 4, h: 5 },
+  { value: '2:1', w: 2, h: 1 },
+  { value: '1:2', w: 1, h: 2 },
+  { value: '21:9', w: 21, h: 9 },
+  { value: '9:21', w: 9, h: 21 }
+];
+
+/**
+ * 根据比例 + 分辨率长边计算最终像素尺寸
+ * 长边 = longEdge，短边 = round(longEdge * min(w,h)/max(w,h))
+ */
+function calcSize(ratioValue, resolution) {
+  const r = ASPECT_RATIOS.find(a => a.value === ratioValue) || ASPECT_RATIOS[0];
+  const res = RESOLUTION_PRESETS.find(p => p.value === resolution) || RESOLUTION_PRESETS[0];
+  const longEdge = res.longEdge;
+  const shortEdge = Math.round(longEdge * Math.min(r.w, r.h) / Math.max(r.w, r.h));
+  // 横向（w>h）→ 宽是长边；竖向 → 高是长边
+  return r.w >= r.h ? `${longEdge}x${shortEdge}` : `${shortEdge}x${longEdge}`;
+}
 
 const QUALITY_PRESETS = [
   { value: 'auto', label: '自动' },
@@ -28,7 +55,9 @@ export default function GenerateBar({ aiModels, selectedPrompt, onClearPrompt, o
   const [argValues, setArgValues] = useState({});
   const [refImage, setRefImage] = useState(null);  // File
   const [refImagePreview, setRefImagePreview] = useState('');
-  const [size, setSize] = useState('1024x1024');
+  const [ratio, setRatio] = useState('1:1');
+  const [resolution, setResolution] = useState('1K');
+  const size = calcSize(ratio, resolution);
   const [quality, setQuality] = useState('auto');
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState(null);
@@ -158,17 +187,32 @@ export default function GenerateBar({ aiModels, selectedPrompt, onClearPrompt, o
                 </select>
               </div>
 
-              {/* 尺寸 */}
+              {/* 比例 */}
               <div className="flex items-center gap-1.5">
                 <span className="text-[11px] text-[var(--text-tertiary)]">比例</span>
                 <select
-                  value={size}
-                  onChange={e => setSize(e.target.value)}
+                  value={ratio}
+                  onChange={e => setRatio(e.target.value)}
                   className="px-2 py-1 rounded-md bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-primary)] text-xs outline-none focus:border-[var(--gold)]"
                 >
-                  {SIZE_PRESETS.map(s => <option key={s.value} value={s.value}>{s.label} {s.value}</option>)}
+                  {ASPECT_RATIOS.map(a => <option key={a.value} value={a.value}>{a.value}</option>)}
                 </select>
               </div>
+
+              {/* 分辨率 */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-[var(--text-tertiary)]">分辨率</span>
+                <select
+                  value={resolution}
+                  onChange={e => setResolution(e.target.value)}
+                  className="px-2 py-1 rounded-md bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-primary)] text-xs outline-none focus:border-[var(--gold)]"
+                >
+                  {RESOLUTION_PRESETS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                </select>
+              </div>
+
+              {/* 最终尺寸预览 */}
+              <span className="text-[10px] text-[var(--text-muted)] tabular-nums">{size}</span>
 
               {/* 质量 */}
               <div className="flex items-center gap-1.5">

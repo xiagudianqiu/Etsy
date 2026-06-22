@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import promptsData from '../../data/prompts.json';
-import { Search, Sparkles, ImageOff, ChevronDown, ChevronUp, ArrowDown } from 'lucide-react';
+import { Search, ImageOff } from 'lucide-react';
+import PromptDetailModal from './PromptDetailModal';
 
 const CATEGORIES = [
   { key: 'all', label: '全部', emoji: '✨' },
@@ -8,13 +9,12 @@ const CATEGORIES = [
 ];
 
 /**
- * 提示词库 — 小卡片网格（缩略图+标题），点击展开详情（只看不生成）
- * 点「发送到生图栏」把提示词装入底部生图栏
+ * 提示词库 — 小卡片网格（缩略图+标题），点击弹出详情模态窗
  */
 export default function PromptLibrary({ onSelect, hasApiKey }) {
   const [category, setCategory] = useState('all');
   const [search, setSearch] = useState('');
-  const [expandedId, setExpandedId] = useState(null);  // 展开的卡片 key
+  const [selected, setSelected] = useState(null);  // 选中的提示词（弹窗）
 
   const filtered = useMemo(() => {
     let list = promptsData.prompts;
@@ -31,7 +31,7 @@ export default function PromptLibrary({ onSelect, hasApiKey }) {
   }, [category, search]);
 
   return (
-    <div className="space-y-4 pb-32">  {/* pb-32 给底部生图栏留空间 */}
+    <div className="space-y-4 pb-32">
       {/* 筛选栏 */}
       <div className="card p-4 space-y-3">
         <div className="flex items-center gap-2 flex-wrap">
@@ -71,124 +71,64 @@ export default function PromptLibrary({ onSelect, hasApiKey }) {
         <div className="card p-12 text-center text-[var(--text-tertiary)]">没有匹配的提示词</div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-          {filtered.map(p => {
-            const key = `${p.category}-${p.id}`;
-            const expanded = expandedId === key;
-            return (
-              <PromptCard
-                key={key}
-                prompt={p}
-                expanded={expanded}
-                onToggle={() => setExpandedId(expanded ? null : key)}
-                onSelect={onSelect}
-              />
-            );
-          })}
+          {filtered.map(p => (
+            <PromptCard
+              key={`${p.category}-${p.id}`}
+              prompt={p}
+              onClick={() => setSelected(p)}
+            />
+          ))}
         </div>
+      )}
+
+      {/* 详情弹窗 */}
+      {selected && (
+        <PromptDetailModal
+          prompt={selected}
+          onClose={() => setSelected(null)}
+          onUse={(p) => {
+            onSelect(p);
+            setSelected(null);
+          }}
+        />
       )}
     </div>
   );
 }
 
-function PromptCard({ prompt, expanded, onToggle, onSelect }) {
+function PromptCard({ prompt, onClick }) {
   const [imgError, setImgError] = useState(false);
 
   return (
-    <div className={`card overflow-hidden transition-all ${expanded ? 'col-span-2 sm:col-span-3 md:col-span-4 lg:col-span-5' : ''}`}>
-      {/* 未展开：缩略图 + 标题 */}
-      <button onClick={onToggle} className="w-full text-left">
-        <div className="aspect-square bg-[var(--bg-elevated)] relative overflow-hidden">
-          {prompt.imageUrl && !imgError ? (
-            <img
-              src={prompt.imageUrl}
-              alt={prompt.title}
-              loading="lazy"
-              onError={() => setImgError(true)}
-              className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-            />
-          ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center text-[var(--text-muted)]">
-              <ImageOff className="w-6 h-6 mb-1" />
-            </div>
-          )}
-          {/* 分类小标 */}
-          <div className="absolute top-1.5 left-1.5">
-            <span className="text-[9px] px-1.5 py-0.5 rounded bg-black/50 text-white backdrop-blur-sm">
-              {prompt.categoryEmoji}
-            </span>
+    <button
+      onClick={onClick}
+      className="card overflow-hidden text-left hover:border-[var(--gold)] transition-colors group"
+    >
+      <div className="aspect-square bg-[var(--bg-elevated)] relative overflow-hidden">
+        {prompt.imageUrl && !imgError ? (
+          <img
+            src={prompt.imageUrl}
+            alt={prompt.title}
+            loading="lazy"
+            onError={() => setImgError(true)}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center text-[var(--text-muted)]">
+            <ImageOff className="w-6 h-6 mb-1" />
           </div>
-          {/* 展开指示 */}
-          <div className="absolute bottom-1.5 right-1.5">
-            <span className="w-5 h-5 rounded-full bg-black/50 flex items-center justify-center backdrop-blur-sm">
-              {expanded ? <ChevronUp className="w-3 h-3 text-white" /> : <ChevronDown className="w-3 h-3 text-white" />}
-            </span>
-          </div>
+        )}
+        <div className="absolute top-1.5 left-1.5">
+          <span className="text-[9px] px-1.5 py-0.5 rounded bg-black/50 text-white backdrop-blur-sm">
+            {prompt.categoryEmoji}
+          </span>
         </div>
-        {/* 标题 */}
-        <div className="p-2">
-          <h3 className="text-[11px] font-medium text-[var(--text-primary)] line-clamp-2 leading-tight" title={prompt.title}>
-            {prompt.title}
-          </h3>
-        </div>
-      </button>
-
-      {/* 展开后：详情 */}
-      {expanded && (
-        <div className="p-4 border-t border-[var(--border)] fade-in">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* 左：大图 */}
-            <div className="aspect-square rounded-lg overflow-hidden bg-[var(--bg)] border border-[var(--border)]">
-              {prompt.imageUrl && !imgError ? (
-                <img src={prompt.imageUrl} alt={prompt.title} className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-[var(--text-muted)] text-sm">无参考图</div>
-              )}
-            </div>
-
-            {/* 右：信息 */}
-            <div className="space-y-3">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="chip chip-gold text-[10px]">{prompt.categoryEmoji} {prompt.categoryLabel}</span>
-                  <span className="text-[10px] text-[var(--text-tertiary)] tabular-nums">#{prompt.id}</span>
-                </div>
-                <h3 className="text-[14px] font-semibold text-[var(--text-primary)]">{prompt.title}</h3>
-                {prompt.author && (
-                  <div className="text-[10px] text-[var(--text-muted)] mt-1">
-                    来源：{prompt.authorUrl ? (
-                      <a href={prompt.authorUrl} target="_blank" rel="noreferrer" className="text-[var(--gold)] hover:underline">@{prompt.author}</a>
-                    ) : `@${prompt.author}`}
-                  </div>
-                )}
-              </div>
-
-              {prompt.arguments.length > 0 && (
-                <div className="text-[11px] text-[var(--text-tertiary)] flex items-center gap-1.5">
-                  <Sparkles className="w-3 h-3 text-[var(--gold)]" />
-                  含 {prompt.arguments.length} 个可调参数
-                </div>
-              )}
-
-              {/* 提示词预览 */}
-              <div>
-                <div className="text-[10px] text-[var(--text-tertiary)] mb-1 uppercase tracking-wider">提示词（英文）</div>
-                <div className="text-[11px] text-[var(--text-secondary)] font-mono leading-relaxed bg-[var(--bg)] rounded-md p-2.5 max-h-32 overflow-y-auto">
-                  {prompt.filledPrompt}
-                </div>
-              </div>
-
-              {/* 发送到生图栏 */}
-              <button
-                onClick={() => onSelect(prompt)}
-                className="btn-primary w-full text-xs"
-              >
-                <ArrowDown className="w-3 h-3" />
-                发送到生图栏
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+      </div>
+      <div className="p-2">
+        <h3 className="text-[11px] font-medium text-[var(--text-primary)] line-clamp-2 leading-tight" title={prompt.title}>
+          {prompt.title}
+        </h3>
+      </div>
+    </button>
   );
 }
