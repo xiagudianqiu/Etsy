@@ -7,7 +7,8 @@
  * 生成图片
  * @param {string} apiKey - 模型专用 API Key
  * @param {string} prompt - 提示词
- * @param {object} opts - { size, quality, model, endpoint, refImage }
+ * @param {object} opts - { size, quality, model, endpoint, refImages }
+ *   refImages: File[] 参考图数组（最多4张，图生图）
  * @returns {Promise<{ ok: boolean, imageUrl?: string, error?: string }>}
  */
 export async function generateImage(apiKey, prompt, opts = {}) {
@@ -20,50 +21,46 @@ export async function generateImage(apiKey, prompt, opts = {}) {
     quality = 'auto',
     model = 'gpt-image-2',
     endpoint = 'https://api.evolink.ai/v1/images/generations',
-    refImage = null
+    refImages = []
   } = opts;
 
-  // 参考图转 base64（图生图）
-  let refImageB64 = null;
-  if (refImage) {
-    refImageB64 = await fileToBase64(refImage);
-  }
+  const refs = (refImages || []).filter(Boolean).slice(0, 4);
 
   try {
-    // 根据是否有参考图决定接口模式
-    const isImageToImage = !!refImageB64;
-    const url = isImageToImage && endpoint.includes('/generations')
-      ? endpoint.replace('/generations', '/edits')
-      : endpoint;
+    // 图生图（有参考图）：multipart/form-data，多张图片用 image / image2 / image3 / image4
+    if (refs.length > 0) {
+      const editUrl = endpoint.includes('/generations')
+        ? endpoint.replace('/generations', '/edits')
+        : endpoint;
 
-    let body;
-    let headers = {
-      'Authorization': `Bearer ${apiKey}`
-    };
-
-    if (isImageToImage) {
-      // 图生图：multipart/form-data
       const formData = new FormData();
       formData.append('model', model);
       formData.append('prompt', prompt);
-      formData.append('image', refImage);
       formData.append('size', size);
-      headers['Content-Type'] = undefined;  // 让浏览器自动设置 boundary
-      const resp = await fetch(url, { method: 'POST', headers, body: formData });
+      // 多图：EvoLink/OpenAI 兼容用 image + image[]，这里用 image、image2、image3、image4
+      refs.forEach((file, i) => {
+        formData.append(i === 0 ? 'image' : `image${i + 1}`, file);
+      });
+      // 同时加一个 image[] 兼容某些 API
+      refs.forEach(file => formData.append('image[]', file));
+
+      const resp = await fetch(editUrl, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+        body: formData
+      });
       return await handleResp(resp);
     }
 
     // 文生图：JSON
-    headers['Content-Type'] = 'application/json';
-    body = JSON.stringify({
-      model,
-      prompt,
-      size,
-      quality,
-      n: 1
+    const resp = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ model, prompt, size, quality, n: 1 })
     });
-
-    const resp = await fetch(endpoint, { method: 'POST', headers, body });
     return await handleResp(resp);
   } catch (err) {
     return { ok: false, error: err.message || '网络错误' };

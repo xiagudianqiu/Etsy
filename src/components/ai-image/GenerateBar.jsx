@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Sparkles, Loader2, Image as ImageIcon, X, Upload, AlertCircle, Download, RefreshCw, ChevronUp, ChevronDown } from 'lucide-react';
+import { Sparkles, Loader2, Image as ImageIcon, X, Upload, AlertCircle, Download, RefreshCw, ChevronUp, ChevronDown, Plus } from 'lucide-react';
 import { generateImage, fillPrompt } from '../../utils/evolinkApi';
 
 const RESOLUTION_PRESETS = [
@@ -53,8 +53,8 @@ export default function GenerateBar({ aiModels, selectedPrompt, onClearPrompt, o
   const [prompt, setPrompt] = useState('');
   const [useTemplate, setUseTemplate] = useState(true);  // 是否用模板（带参数）
   const [argValues, setArgValues] = useState({});
-  const [refImage, setRefImage] = useState(null);  // File
-  const [refImagePreview, setRefImagePreview] = useState('');
+  const [refImages, setRefImages] = useState([]);  // File[]（最多4张）
+  const [refPreviews, setRefPreviews] = useState([]);  // string[] base64
   const [ratio, setRatio] = useState('1:1');
   const [resolution, setResolution] = useState('1K');
   const size = calcSize(ratio, resolution);
@@ -86,16 +86,35 @@ export default function GenerateBar({ aiModels, selectedPrompt, onClearPrompt, o
     : (prompt || (selectedPrompt ? selectedPrompt.filledPrompt : ''));
 
   const handleUploadRef = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    const valid = files.filter(f => f.type.startsWith('image/'));
+    if (valid.length === 0) {
       setError('请上传图片文件');
       return;
     }
-    setRefImage(file);
-    const reader = new FileReader();
-    reader.onload = (ev) => setRefImagePreview(ev.target.result);
-    reader.readAsDataURL(file);
+    setRefImages(prev => {
+      const remain = 4 - prev.length;
+      if (remain <= 0) {
+        setError('最多上传 4 张参考图');
+        return prev;
+      }
+      const adding = valid.slice(0, remain);
+      // 读预览
+      adding.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (ev) => setRefPreviews(p => [...p, ev.target.result]);
+        reader.readAsDataURL(file);
+      });
+      return [...prev, ...adding];
+    });
+    setError('');
+    e.target.value = '';  // 允许重选
+  };
+
+  const removeRefImage = (idx) => {
+    setRefImages(prev => prev.filter((_, i) => i !== idx));
+    setRefPreviews(prev => prev.filter((_, i) => i !== idx));
   };
 
   const handleGenerate = async () => {
@@ -116,7 +135,7 @@ export default function GenerateBar({ aiModels, selectedPrompt, onClearPrompt, o
       quality,
       model: selectedModel.model,
       endpoint: selectedModel.endpoint,
-      refImage: refImage  // 传参考图（evolinkApi 里处理）
+      refImages: refImages  // 数组
     });
 
     setResult(r);
@@ -226,16 +245,17 @@ export default function GenerateBar({ aiModels, selectedPrompt, onClearPrompt, o
                 </select>
               </div>
 
-              {/* 参考图上传 */}
+              {/* 参考图上传（最多4张） */}
               <button
                 onClick={() => fileRef.current?.click()}
-                className={`btn-ghost text-xs ${refImage ? 'border-[var(--gold)] text-[var(--gold-bright)]' : ''}`}
-                title="上传参考图（图生图）"
+                disabled={refImages.length >= 4}
+                className={`btn-ghost text-xs disabled:opacity-40 disabled:cursor-not-allowed ${refImages.length > 0 ? 'border-[var(--gold)] text-[var(--gold-bright)]' : ''}`}
+                title={refImages.length >= 4 ? '已达上限 4 张' : '上传参考图（最多 4 张）'}
               >
                 <Upload className="w-3 h-3" />
-                {refImage ? '已传参考图' : '参考图'}
+                参考图 {refImages.length > 0 && `${refImages.length}/4`}
               </button>
-              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleUploadRef} />
+              <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={handleUploadRef} />
 
               <div className="flex-1" />
 
@@ -244,14 +264,36 @@ export default function GenerateBar({ aiModels, selectedPrompt, onClearPrompt, o
               </button>
             </div>
 
-            {/* 参考图预览 */}
-            {refImagePreview && (
-              <div className="flex items-center gap-2 p-2 rounded-md bg-[var(--bg-elevated)] border border-[var(--border)]">
-                <img src={refImagePreview} alt="参考图" className="w-10 h-10 rounded object-cover" />
-                <span className="text-[11px] text-[var(--text-tertiary)] flex-1 truncate">{refImage?.name}</span>
-                <button onClick={() => { setRefImage(null); setRefImagePreview(''); }} className="text-[var(--text-tertiary)] hover:text-[var(--down)]">
-                  <X className="w-3.5 h-3.5" />
-                </button>
+            {/* 参考图预览（多图网格） */}
+            {refPreviews.length > 0 && (
+              <div className="p-2 rounded-md bg-[var(--bg-elevated)] border border-[var(--border)]">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {refPreviews.map((src, idx) => (
+                    <div key={idx} className="relative group">
+                      <img src={src} alt={`参考图${idx+1}`} className="w-12 h-12 rounded object-cover border border-[var(--border)]" />
+                      <button
+                        onClick={() => removeRefImage(idx)}
+                        className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-[var(--down)] text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="删除"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                      <span className="absolute bottom-0 left-0 text-[8px] px-1 bg-black/60 text-white rounded-tr">{idx+1}</span>
+                    </div>
+                  ))}
+                  {refImages.length < 4 && (
+                    <button
+                      onClick={() => fileRef.current?.click()}
+                      className="w-12 h-12 rounded border-2 border-dashed border-[var(--border-strong)] flex items-center justify-center text-[var(--text-tertiary)] hover:border-[var(--gold)] hover:text-[var(--gold-bright)] transition-colors"
+                      title="继续添加"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                <div className="text-[10px] text-[var(--text-tertiary)] mt-1.5">
+                  {refImages.length} 张参考图 · {refImages.length < 4 ? `还可加 ${4 - refImages.length} 张` : '已达上限'}
+                </div>
               </div>
             )}
 
