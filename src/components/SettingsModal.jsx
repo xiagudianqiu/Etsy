@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { X, Save, RotateCcw, Trash2, Plus, Sparkles, RefreshCw, Tag, Coins, Mail, Send, Info } from 'lucide-react';
+import { X, Save, RotateCcw, Trash2, Plus, Sparkles, RefreshCw, Tag, Coins, Mail, Send, Info, Cpu, Eye, EyeOff, Copy } from 'lucide-react';
 import { CURRENCIES, DEFAULT_RATES, fetchRates } from '../utils/currency';
 import { sendTestEmail } from '../utils/mailBackup';
 
@@ -13,7 +13,7 @@ const DEFAULT_PRODUCTS = {
   '32oz': 100
 };
 
-export default function SettingsModal({ isOpen, onClose, config, onSave, orders, mailConfig, onUpdateMailConfig, onUpdateEvolinkKey, quota }) {
+export default function SettingsModal({ isOpen, onClose, config, onSave, orders, mailConfig, onUpdateMailConfig, onUpdateAiModels, quota }) {
   const [products, setProducts] = useState({});
   const [newName, setNewName] = useState('');
   const [newCost, setNewCost] = useState('');
@@ -302,8 +302,8 @@ export default function SettingsModal({ isOpen, onClose, config, onSave, orders,
           {/* ===== 邮件备份 ===== */}
           <MailBackupSection mailConfig={mailConfig} updateMailConfig={onUpdateMailConfig} quota={quota} />
 
-          {/* ===== AI 生图 API Key ===== */}
-          <AIImageSection config={config} onUpdateKey={onUpdateEvolinkKey} />
+          {/* ===== AI 生图模型配置 ===== */}
+          <AIImageSection config={config} onUpdateAiModels={onUpdateAiModels} />
         </div>
 
         {/* 底部 */}
@@ -463,71 +463,208 @@ function MailBackupSection({ mailConfig, updateMailConfig, quota }) {
 // ===================================================================
 // AI 生图 API Key 配置
 // ===================================================================
-function AIImageSection({ config, onUpdateKey }) {
-  const [localKey, setLocalKey] = useState(config?.evolinkApiKey || '');
-  const [showKey, setShowKey] = useState(false);
-  const [saved, setSaved] = useState(false);
+// ===================================================================
+// AI 生图模型配置（多套预设）
+// ===================================================================
 
-  useEffect(() => {
-    setLocalKey(config?.evolinkApiKey || '');
-  }, [config?.evolinkApiKey]);
+// 服务商预设：选了自动填 endpoint + 默认模型名
+const AI_PROVIDERS = [
+  { key: 'evolink', label: 'EvoLink', defaultModel: 'gpt-image-2', defaultEndpoint: 'https://api.evolink.ai/v1/images/generations', signupUrl: 'https://evolink.ai/signup' },
+  { key: 'openai', label: 'OpenAI', defaultModel: 'gpt-image-1', defaultEndpoint: 'https://api.openai.com/v1/images/generations', signupUrl: 'https://platform.openai.com' },
+  { key: 'replicate', label: 'Replicate', defaultModel: 'black-forest-labs/flux-1.1-pro', defaultEndpoint: 'https://api.replicate.com/v1/predictions', signupUrl: 'https://replicate.com' },
+  { key: 'together', label: 'Together AI', defaultModel: 'flux-1.1-pro', defaultEndpoint: 'https://api.together.xyz/v1/images/generations', signupUrl: 'https://together.ai' },
+  { key: 'custom', label: '自定义', defaultModel: '', defaultEndpoint: '', signupUrl: '' }
+];
 
-  const handleSave = async () => {
-    await onUpdateKey(localKey.trim());
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+function AIImageSection({ config, onUpdateAiModels }) {
+  const models = config?.aiModels || [];
+  const [editingId, setEditingId] = useState(null);  // 当前展开编辑的模型 id
+  const [draft, setDraft] = useState(null);          // 编辑中的草稿
+  const [showKey, setShowKey] = useState({});        // {id: bool} 控制每个 Key 显隐
+
+  const startAdd = () => {
+    const id = `m_${Date.now()}`;
+    setEditingId(id);
+    setDraft({
+      id,
+      label: '',
+      provider: 'evolink',
+      model: 'gpt-image-2',
+      apiKey: '',
+      endpoint: 'https://api.evolink.ai/v1/images/generations'
+    });
   };
 
-  const handleClear = async () => {
-    setLocalKey('');
-    await onUpdateKey('');
+  const startEdit = (m) => {
+    setEditingId(m.id);
+    setDraft({ ...m });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setDraft(null);
+  };
+
+  const saveDraft = async () => {
+    if (!draft.label.trim() || !draft.model.trim() || !draft.apiKey.trim()) {
+      alert('请填写标签、模型名和 API Key');
+      return;
+    }
+    const exists = models.find(m => m.id === draft.id);
+    const next = exists
+      ? models.map(m => m.id === draft.id ? draft : m)
+      : [...models, draft];
+    await onUpdateAiModels(next);
+    cancelEdit();
+  };
+
+  const removeModel = async (id) => {
+    if (!confirm('确定删除这个模型配置？')) return;
+    await onUpdateAiModels(models.filter(m => m.id !== id));
+  };
+
+  const onProviderChange = (providerKey) => {
+    const p = AI_PROVIDERS.find(x => x.key === providerKey);
+    setDraft(d => ({
+      ...d,
+      provider: providerKey,
+      model: d.model || p.defaultModel,
+      endpoint: d.endpoint || p.defaultEndpoint
+    }));
   };
 
   return (
     <section>
-      <SectionTitle icon={Sparkles} title="AI 生图" sub="GPT-Image-2 API Key（用户自备）" noMargin />
-
-      <div className="space-y-3">
-        <div>
-          <label className="block text-xs text-[var(--text-tertiary)] mb-1.5">EvoLink API Key</label>
-          <div className="relative">
-            <input
-              type={showKey ? 'text' : 'password'}
-              value={localKey}
-              onChange={e => setLocalKey(e.target.value)}
-              placeholder="sk-xxxxxxxx 或 re_xxxxxxxx"
-              className="w-full px-3 py-2 pr-20 rounded-lg bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-primary)] text-sm outline-none focus:border-[var(--gold)] placeholder-[var(--text-tertiary)] font-mono"
-            />
-            <button
-              onClick={() => setShowKey(!showKey)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] px-2 py-1"
-            >
-              {showKey ? '隐藏' : '显示'}
-            </button>
-          </div>
-          <p className="text-[10px] text-[var(--text-muted)] mt-1.5 leading-relaxed">
-            用于 GPT-Image-2 生图。去 <a href="https://evolink.ai/signup" target="_blank" rel="noreferrer" className="text-[var(--gold-bright)] underline">evolink.ai</a> 注册获取 Key，费用由你自己的账户承担。
-            <br />⚠️ Key 存在你的 Supabase 账户下（仅本人可见），建议只充少量额度。
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleSave}
-            disabled={localKey === (config?.evolinkApiKey || '')}
-            className="btn-primary text-xs disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <Save className="w-3 h-3" />
-            {saved ? '已保存 ✓' : '保存 Key'}
-          </button>
-          {localKey && (
-            <button onClick={handleClear} className="btn-ghost text-xs">
-              <Trash2 className="w-3 h-3" />
-              清除
-            </button>
-          )}
-        </div>
+      <div className="flex items-center justify-between mb-3">
+        <SectionTitle icon={Cpu} title="AI 生图模型" sub="预设多个模型配置（含 API Key）" noMargin />
+        <button onClick={startAdd} className="btn-ghost text-xs">
+          <Plus className="w-3 h-3" />
+          添加模型
+        </button>
       </div>
+
+      {/* 模型列表 */}
+      {models.length === 0 && !draft && (
+        <div className="p-4 rounded-lg bg-[var(--bg-elevated)] border border-dashed border-[var(--border)] text-center text-xs text-[var(--text-tertiary)]">
+          还没有配置模型，点「添加模型」开始
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {models.map(m => (
+          <div key={m.id} className="p-3 rounded-lg bg-[var(--bg-card)] border border-[var(--border)]">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-[var(--gold-soft)] flex items-center justify-center flex-shrink-0">
+                <Cpu className="w-4 h-4 text-[var(--gold-bright)]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] font-medium text-[var(--text-primary)]">{m.label}</div>
+                <div className="text-[11px] text-[var(--text-tertiary)] mt-0.5">
+                  {AI_PROVIDERS.find(p => p.key === m.provider)?.label || m.provider} · <span className="font-mono">{m.model}</span>
+                </div>
+              </div>
+              <button onClick={() => startEdit(m)} className="btn-icon w-8 h-8" title="编辑">
+                <Tag className="w-3.5 h-3.5" />
+              </button>
+              <button onClick={() => removeModel(m.id)} className="btn-icon w-8 h-8 hover:text-[var(--down)]" title="删除">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 编辑/新增面板 */}
+      {draft && (
+        <div className="mt-3 p-4 rounded-lg bg-[var(--bg-elevated)] border border-[var(--gold)] space-y-3 fade-in">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-[var(--gold-bright)]">{models.find(m => m.id === draft.id) ? '编辑模型' : '新模型'}</span>
+            <button onClick={cancelEdit} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"><X className="w-3.5 h-3.5" /></button>
+          </div>
+
+          {/* 标签 */}
+          <div>
+            <label className="block text-[11px] text-[var(--text-tertiary)] mb-1">显示标签</label>
+            <input
+              value={draft.label}
+              onChange={e => setDraft(d => ({ ...d, label: e.target.value }))}
+              placeholder="如：EvoLink 标准版"
+              className="w-full px-2.5 py-1.5 rounded-md bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-primary)] text-sm outline-none focus:border-[var(--gold)]"
+            />
+          </div>
+
+          {/* 服务商 */}
+          <div>
+            <label className="block text-[11px] text-[var(--text-tertiary)] mb-1">服务商（选了自动填默认值）</label>
+            <select
+              value={draft.provider}
+              onChange={e => onProviderChange(e.target.value)}
+              className="w-full px-2.5 py-1.5 rounded-md bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-primary)] text-sm outline-none focus:border-[var(--gold)]"
+            >
+              {AI_PROVIDERS.map(p => <option key={p.key} value={p.key}>{p.label}{p.defaultModel && ` (${p.defaultModel})`}</option>)}
+            </select>
+          </div>
+
+          {/* 模型名 */}
+          <div>
+            <label className="block text-[11px] text-[var(--text-tertiary)] mb-1">模型名</label>
+            <input
+              value={draft.model}
+              onChange={e => setDraft(d => ({ ...d, model: e.target.value }))}
+              placeholder="gpt-image-2"
+              className="w-full px-2.5 py-1.5 rounded-md bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-primary)] text-sm font-mono outline-none focus:border-[var(--gold)]"
+            />
+          </div>
+
+          {/* API Key */}
+          <div>
+            <label className="block text-[11px] text-[var(--text-tertiary)] mb-1">API Key</label>
+            <div className="relative">
+              <input
+                type={showKey[draft.id] ? 'text' : 'password'}
+                value={draft.apiKey}
+                onChange={e => setDraft(d => ({ ...d, apiKey: e.target.value }))}
+                placeholder="sk-xxxxxxxx"
+                className="w-full px-2.5 py-1.5 pr-12 rounded-md bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-primary)] text-sm font-mono outline-none focus:border-[var(--gold)]"
+              />
+              <button
+                onClick={() => setShowKey(s => ({ ...s, [draft.id]: !s[draft.id] }))}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+              >
+                {showKey[draft.id] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          </div>
+
+          {/* Endpoint */}
+          <div>
+            <label className="block text-[11px] text-[var(--text-tertiary)] mb-1">API Endpoint（可选，一般自动填）</label>
+            <input
+              value={draft.endpoint}
+              onChange={e => setDraft(d => ({ ...d, endpoint: e.target.value }))}
+              placeholder="https://api.xxx.com/v1/images/generations"
+              className="w-full px-2.5 py-1.5 rounded-md bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-primary)] text-xs font-mono outline-none focus:border-[var(--gold)]"
+            />
+          </div>
+
+          {/* 注册提示 */}
+          {draft.provider !== 'custom' && (
+            <div className="text-[10px] text-[var(--text-tertiary)] flex items-center gap-1.5">
+              <Info className="w-3 h-3" />
+              没有账号？<a href={AI_PROVIDERS.find(p => p.key === draft.provider)?.signupUrl} target="_blank" rel="noreferrer" className="text-[var(--gold-bright)] underline">点这里注册</a>
+              · Key 仅你本人可见（存你的账户）
+            </div>
+          )}
+
+          {/* 保存 */}
+          <div className="flex gap-2 pt-1">
+            <button onClick={saveDraft} className="btn-primary text-xs flex-1">
+              <Save className="w-3 h-3" /> 保存
+            </button>
+            <button onClick={cancelEdit} className="btn-ghost text-xs">取消</button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

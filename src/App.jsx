@@ -45,7 +45,7 @@ function App() {
     allMonthsSummary,
     compareMode, setCompareMode, compareMonth, setCompareMonth, compareProfitData,
     importMultipleCSV, deleteMonth, etsyData, reload,
-    updateProductCosts, updateExchangeRate, updateConfigFields, updateMailConfig, updateEvolinkKey,
+    updateProductCosts, updateExchangeRate, updateConfigFields, updateMailConfig, updateAiModels,
     quota, mailConfig,
     isLoading, loadingData, error, setError
   } = useEtsyData();
@@ -353,7 +353,7 @@ function App() {
       }
 
       case 'ai-image':
-        return <AIImagePage user={user} apiKey={etsyData.config?.evolinkApiKey} />;
+        return <AIImagePage aiModels={etsyData.config?.aiModels || []} />;
 
       default:
         return null;
@@ -446,7 +446,7 @@ function App() {
         orders={allMonthsSummary?.allOrders || currentMonthData?.orders || []}
         mailConfig={mailConfig}
         onUpdateMailConfig={updateMailConfig}
-        onUpdateEvolinkKey={updateEvolinkKey}
+        onUpdateAiModels={updateAiModels}
         quota={quota}
         onSave={(c) => {
           updateConfigFields({

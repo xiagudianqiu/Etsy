@@ -68,7 +68,7 @@ export function useEtsyData() {
       const config = {
         ...DEFAULT_CONFIG,
         ...(profile.config || {}),
-        evolinkApiKey: profile.evolink_api_key || ''  // AI 生图 Key（独立字段）
+        aiModels: profile.ai_models || []  // AI 生图模型预设数组
       };
 
       setEtsyData({ config, months });
@@ -315,11 +315,11 @@ export function useEtsyData() {
     }
   }, [user, etsyData.config]);
 
-  // ===== AI 生图 API Key =====
-  const updateEvolinkKey = useCallback(async (key) => {
+  // ===== AI 生图模型配置 =====
+  const updateAiModels = useCallback(async (models) => {
     if (!user || !supabase) return;
-    setEtsyData(prev => ({ ...prev, config: { ...prev.config, evolinkApiKey: key } }));
-    await supabase.from('profiles').update({ evolink_api_key: key }).eq('id', user.id);
+    setEtsyData(prev => ({ ...prev, config: { ...prev.config, aiModels: models } }));
+    await supabase.from('profiles').update({ ai_models: models }).eq('id', user.id);
   }, [user]);
 
   // ===== 邮件备份配置 =====
@@ -359,7 +359,7 @@ export function useEtsyData() {
     // 操作
     importCSV, importMultipleCSV, deleteMonth,
     updateProductCosts, updateExchangeRate, updateConfigFields,
-    updateMailConfig, updateEvolinkKey, clearAllData,
+    updateMailConfig, updateAiModels, clearAllData,
     reload: loadUserData,
 
     // 配额
