@@ -1,26 +1,22 @@
 import {
   LayoutDashboard, ShoppingCart, Coins,
-  Settings, TrendingUp, LogOut, User
+  Settings, TrendingUp, LogOut, User, Sparkles
 } from 'lucide-react';
 
-const NAV_ITEMS = [
+const NAV_GROUPS = [
   {
-    id: 'dashboard',
-    label: '仪表盘',
-    icon: LayoutDashboard,
-    desc: '店铺总览 · 健康度'
+    label: '分析',
+    items: [
+      { id: 'dashboard', label: '仪表盘', icon: LayoutDashboard, desc: '店铺总览 · 健康度' },
+      { id: 'orders', label: '订单', icon: ShoppingCart, desc: '订单 · 产品 · 费用' },
+      { id: 'cost', label: '成本与广告', icon: Coins, desc: '成本 · ROI · 模拟' }
+    ]
   },
   {
-    id: 'orders',
-    label: '订单',
-    icon: ShoppingCart,
-    desc: '订单 · 产品 · 费用'
-  },
-  {
-    id: 'cost',
-    label: '成本与广告',
-    icon: Coins,
-    desc: '成本 · ROI · 模拟'
+    label: '创意',
+    items: [
+      { id: 'ai-image', label: 'AI 生图', icon: Sparkles, desc: '624 提示词 · 生产品图' }
+    ]
   }
 ];
 
@@ -41,48 +37,57 @@ export default function Sidebar({ activePage, onPageChange, onSettingsClick, mon
       </div>
 
       {/* 导航 */}
-      <nav className="flex-1 px-3 py-5 space-y-1.5 overflow-y-auto">
-        {NAV_ITEMS.map(item => {
-          const Icon = item.icon;
-          const active = activePage === item.id;
-          const badge = item.id === 'orders' && orderCount > 0 ? orderCount
-            : item.id === 'dashboard' && monthCount > 0 ? monthCount
-            : null;
-          return (
-            <button
-              key={item.id}
-              onClick={() => onPageChange(item.id)}
-              className={`
-                w-full flex items-start gap-3 px-3 py-3 rounded-xl transition-all relative text-left
-                ${active
-                  ? 'bg-[rgba(212,160,86,0.08)]'
-                  : 'hover:bg-[rgba(255,255,255,0.03)]'
-                }
-              `}
-            >
-              {active && (
-                <span className="absolute left-0 top-2 bottom-2 w-[2px] bg-[var(--gold-bright)] rounded-full" />
-              )}
-              <Icon
-                className={`w-5 h-5 mt-0.5 flex-shrink-0 ${active ? 'text-[var(--gold-bright)]' : 'text-[var(--text-tertiary)]'}`}
-                strokeWidth={active ? 2.25 : 2}
-              />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className={`text-[13.5px] font-medium ${active ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>
-                    {item.label}
-                  </span>
-                  {badge !== null && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[rgba(255,255,255,0.05)] text-[var(--text-tertiary)] tabular-nums">
-                      {badge}
-                    </span>
-                  )}
-                </div>
-                <div className="text-[10.5px] text-[var(--text-tertiary)] mt-0.5">{item.desc}</div>
-              </div>
-            </button>
-          );
-        })}
+      <nav className="flex-1 px-3 py-5 space-y-5 overflow-y-auto">
+        {NAV_GROUPS.map(group => (
+          <div key={group.label}>
+            <div className="px-3 mb-2 text-[10px] font-medium text-[var(--text-tertiary)] tracking-[0.15em] uppercase">
+              {group.label}
+            </div>
+            <div className="space-y-0.5">
+              {group.items.map(item => {
+                const Icon = item.icon;
+                const active = activePage === item.id;
+                const badge = item.id === 'orders' && orderCount > 0 ? orderCount
+                  : item.id === 'dashboard' && monthCount > 0 ? monthCount
+                  : null;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => onPageChange(item.id)}
+                    className={`
+                      w-full flex items-start gap-3 px-3 py-2.5 rounded-xl transition-all relative text-left
+                      ${active
+                        ? 'bg-[rgba(212,160,86,0.08)]'
+                        : 'hover:bg-[rgba(255,255,255,0.03)]'
+                      }
+                    `}
+                  >
+                    {active && (
+                      <span className="absolute left-0 top-2 bottom-2 w-[2px] bg-[var(--gold-bright)] rounded-full" />
+                    )}
+                    <Icon
+                      className={`w-4 h-4 mt-0.5 flex-shrink-0 ${active ? 'text-[var(--gold-bright)]' : 'text-[var(--text-tertiary)]'}`}
+                      strokeWidth={active ? 2.25 : 2}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[13.5px] font-medium ${active ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>
+                          {item.label}
+                        </span>
+                        {badge !== null && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[rgba(255,255,255,0.05)] text-[var(--text-tertiary)] tabular-nums">
+                            {badge}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[10.5px] text-[var(--text-tertiary)] mt-0.5">{item.desc}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
       {/* 底部 */}

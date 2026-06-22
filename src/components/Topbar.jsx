@@ -4,7 +4,8 @@ import { CURRENCIES } from '../utils/currency';
 const PAGE_META = {
   dashboard: { title: '仪表盘', desc: '店铺整体经营状况 · 健康度评分' },
   orders: { title: '订单', desc: '订单明细 · 产品利润 · 费用拆解' },
-  cost: { title: '成本与广告', desc: '成本模拟 · 广告 ROI · 盈亏分析' }
+  cost: { title: '成本与广告', desc: '成本模拟 · 广告 ROI · 盈亏分析' },
+  'ai-image': { title: 'AI 生图', desc: 'GPT-Image-2 提示词库 · 一键生产品图/广告图' }
 };
 
 export default function Topbar({ activePage, selectedMonth, selectedMonths = [], onImportClick, hasData, showUploader, displayCurrency = 'USD', onCurrencyChange }) {

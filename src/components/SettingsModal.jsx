@@ -13,7 +13,7 @@ const DEFAULT_PRODUCTS = {
   '32oz': 100
 };
 
-export default function SettingsModal({ isOpen, onClose, config, onSave, orders, mailConfig, onUpdateMailConfig, quota }) {
+export default function SettingsModal({ isOpen, onClose, config, onSave, orders, mailConfig, onUpdateMailConfig, onUpdateEvolinkKey, quota }) {
   const [products, setProducts] = useState({});
   const [newName, setNewName] = useState('');
   const [newCost, setNewCost] = useState('');
@@ -301,6 +301,9 @@ export default function SettingsModal({ isOpen, onClose, config, onSave, orders,
 
           {/* ===== 邮件备份 ===== */}
           <MailBackupSection mailConfig={mailConfig} updateMailConfig={onUpdateMailConfig} quota={quota} />
+
+          {/* ===== AI 生图 API Key ===== */}
+          <AIImageSection config={config} onUpdateKey={onUpdateEvolinkKey} />
         </div>
 
         {/* 底部 */}
@@ -453,6 +456,78 @@ function MailBackupSection({ mailConfig, updateMailConfig, quota }) {
           </div>
         </div>
       )}
+    </section>
+  );
+}
+
+// ===================================================================
+// AI 生图 API Key 配置
+// ===================================================================
+function AIImageSection({ config, onUpdateKey }) {
+  const [localKey, setLocalKey] = useState(config?.evolinkApiKey || '');
+  const [showKey, setShowKey] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setLocalKey(config?.evolinkApiKey || '');
+  }, [config?.evolinkApiKey]);
+
+  const handleSave = async () => {
+    await onUpdateKey(localKey.trim());
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleClear = async () => {
+    setLocalKey('');
+    await onUpdateKey('');
+  };
+
+  return (
+    <section>
+      <SectionTitle icon={Sparkles} title="AI 生图" sub="GPT-Image-2 API Key（用户自备）" noMargin />
+
+      <div className="space-y-3">
+        <div>
+          <label className="block text-xs text-[var(--text-tertiary)] mb-1.5">EvoLink API Key</label>
+          <div className="relative">
+            <input
+              type={showKey ? 'text' : 'password'}
+              value={localKey}
+              onChange={e => setLocalKey(e.target.value)}
+              placeholder="sk-xxxxxxxx 或 re_xxxxxxxx"
+              className="w-full px-3 py-2 pr-20 rounded-lg bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-primary)] text-sm outline-none focus:border-[var(--gold)] placeholder-[var(--text-tertiary)] font-mono"
+            />
+            <button
+              onClick={() => setShowKey(!showKey)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] px-2 py-1"
+            >
+              {showKey ? '隐藏' : '显示'}
+            </button>
+          </div>
+          <p className="text-[10px] text-[var(--text-muted)] mt-1.5 leading-relaxed">
+            用于 GPT-Image-2 生图。去 <a href="https://evolink.ai/signup" target="_blank" rel="noreferrer" className="text-[var(--gold-bright)] underline">evolink.ai</a> 注册获取 Key，费用由你自己的账户承担。
+            <br />⚠️ Key 存在你的 Supabase 账户下（仅本人可见），建议只充少量额度。
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleSave}
+            disabled={localKey === (config?.evolinkApiKey || '')}
+            className="btn-primary text-xs disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Save className="w-3 h-3" />
+            {saved ? '已保存 ✓' : '保存 Key'}
+          </button>
+          {localKey && (
+            <button onClick={handleClear} className="btn-ghost text-xs">
+              <Trash2 className="w-3 h-3" />
+              清除
+            </button>
+          )}
+        </div>
+      </div>
     </section>
   );
 }

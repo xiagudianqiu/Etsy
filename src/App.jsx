@@ -21,6 +21,7 @@ import { exportMonthToCSV } from './utils/exporter';
 import { exportToPDF } from './utils/pdfExporter';
 import PDFReportView from './components/PDFReportView';
 import PDFProgressOverlay from './components/PDFProgressOverlay';
+import AIImagePage from './components/ai-image/AIImagePage';
 import { calculateProfit, calculateOrderProfit } from './utils/profitCalculator';
 import { sendCSVByEmail } from './utils/mailBackup';
 import { useAuth } from './hooks/useAuth';
@@ -44,7 +45,7 @@ function App() {
     allMonthsSummary,
     compareMode, setCompareMode, compareMonth, setCompareMonth, compareProfitData,
     importMultipleCSV, deleteMonth, etsyData, reload,
-    updateProductCosts, updateExchangeRate, updateConfigFields, updateMailConfig,
+    updateProductCosts, updateExchangeRate, updateConfigFields, updateMailConfig, updateEvolinkKey,
     quota, mailConfig,
     isLoading, loadingData, error, setError
   } = useEtsyData();
@@ -351,6 +352,9 @@ function App() {
         );
       }
 
+      case 'ai-image':
+        return <AIImagePage user={user} apiKey={etsyData.config?.evolinkApiKey} />;
+
       default:
         return null;
     }
@@ -442,6 +446,7 @@ function App() {
         orders={allMonthsSummary?.allOrders || currentMonthData?.orders || []}
         mailConfig={mailConfig}
         onUpdateMailConfig={updateMailConfig}
+        onUpdateEvolinkKey={updateEvolinkKey}
         quota={quota}
         onSave={(c) => {
           updateConfigFields({
