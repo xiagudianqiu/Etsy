@@ -1,11 +1,25 @@
 # Etsy Profit Dashboard
 
-Etsy 销售数据分析 · 本地利润仪表盘
+Etsy 销售数据分析 · 多用户利润仪表盘
 
 为 Etsy 卖家打造的一站式利润分析工具。导入月度账单 CSV，自动计算真实到手利润，
 按多月合并、可调币种、批量产品成本配置，并生成专业 PDF 报告。
 
-数据完全本地存储，不上传任何销售信息。
+支持多用户使用——每个卖家账号独立隔离，支持每天 23:00 自动邮件备份 CSV。
+
+## 两种部署模式
+
+### 模式 A: 单用户（最简单，本地或静态托管）
+- 数据存浏览器 LocalStorage
+- 无需后端，双击 index.html 即可用
+- 适合个人使用
+
+### 模式 B: 多用户 SaaS（本仓库当前版本）
+- Supabase 用户认证 + 数据库（按 user_id RLS 隔离）
+- 邮件备份：Vercel Cron 每天 23:00 批量发送
+- 配额限制：每月 30 次上传 + 31 封邮件
+- 适合几十~几百用户共享
+- **详细部署见 [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)**
 
 ## 功能
 
@@ -178,11 +192,86 @@ src/
 └── index.css                # 暖金主题样式
 ```
 
+## 邮件备份 (Vercel + Resend + Vercel KV)
+
+可选功能：上传的 CSV **暂存到服务器队列，每天 23:00（北京时间）自动打包成一封邮件**发送到你邮箱，作为云端备份。
+
+### 工作原理
+
+```
+上传 CSV（浏览器）
+   ↓ POST /api/queue-csv
+Vercel KV 存储（按 邮箱+日期 分组）
+   ↓ 等待
+每天 23:00 Vercel Cron 触发
+   ↓ GET /api/cron-send
+读取当日所有 CSV → 打包多附件邮件
+   ↓ Resend API
+你的邮箱
+```
+
+API Key、KV Token 均存在 Vercel 环境变量，**不暴露给前端**。
+
+### 设置步骤（一次性，约 15 分钟）
+
+#### 1. 注册 Resend（免费 3000 封/月）
+
+1. 打开 https://resend.com → Sign Up
+2. 左侧 **API Keys** → **Create API Key**（权限选 Sending access）
+   - 复制生成的 Key（形如 `re_xxxxxxxx`），只显示一次
+3. 默认可用 `onboarding@resend.dev` 发件，**只能发到你 Resend 账户邮箱**
+   - 想发到任意邮箱：需在 Domains 添加并验证自有域名
+
+#### 2. 创建 Vercel KV 数据库（免费）
+
+部署后在 Vercel 后台：
+1. 进入项目 → **Storage** 标签 → **Create Database** → 选 **KV**
+2. 名字随便（如 `etsy-mail-queue`）→ 创建
+3. 创建后点 **Connect to Project**，自动注入环境变量 `KV_REST_API_URL` / `KV_REST_API_TOKEN`
+
+#### 3. 部署到 Vercel
+
+1. https://vercel.com → Continue with GitHub → 导入 `Etsy` 仓库
+2. **Configure Project** 页面添加环境变量：
+   - `RESEND_API_KEY` = `re_xxxxxxxx`
+   - `RESEND_FROM_EMAIL` = `onboarding@resend.dev`（或已验证域名邮箱）
+   - `CRON_SECRET` = 自己设一个随机字符串（如 `my-secret-123`，防止外部恶意触发 cron）
+   - （KV 变量已在上一步自动注入）
+3. **Deploy** → 等 1 分钟
+4. Vercel 会自动识别 `vercel.json` 里的 cron 配置，每天 23:00 自动跑
+
+#### 4. 启用邮件备份
+
+1. 打开你的 Vercel 部署地址
+2. 设置（齿轮）→「邮件备份」区 → 开关打开 → 填收件邮箱
+3. 点「测试入队」验证连通性（测试文件当晚 23:00 发出）
+4. 保存
+
+之后**每次上传 CSV 自动入队**，当天 23:00 统一打包发送（多 CSV 作为一封邮件的多附件）。
+
+### 手动立即触发发送
+
+不想等到 23:00，可手动访问：
+```
+https://你的部署地址/api/cron-send?token=你的CRON_SECRET
+```
+会立即把队列里所有 CSV 发送并清空队列。
+
+### 注意事项
+
+- **API Key / KV Token 永远不要写在前端代码或推到 GitHub**
+- 本地 `npm run dev` 模式下邮件功能会报错（接口不存在），属正常
+- Vercel 免费层：Cron 每天最多 2 个任务（本功能只用 1 个）、KV 256MB（CSV 远远用不完）
+- Vercel Cron 有约 ±5 分钟误差，23:00 可能 22:55 或 23:05 跑
+- 不想用了：关设置开关 + 在 Vercel 后台删除 cron 即可
+- 修改发送时间：编辑 `vercel.json` 里 `schedule` 字段（UTC 时间，北京=UTC+8）
+
 ## 数据与隐私
 
-- **所有数据保存在浏览器 LocalStorage**，不上传服务器
+- **所有数据保存在浏览器 LocalStorage**，不上传服务器（除非主动启用邮件备份）
 - `*.csv` 在 `.gitignore` 中排除，销售数据不会被提交到 git
 - 汇率获取走公开 API（open.er-api.com），只请求汇率数字，不发送任何业务数据
+- 邮件备份（可选）会把 CSV 内容存到 Vercel KV 并经 Resend 发送
 - 清除浏览器数据 / 删除 LocalStorage 的 `etsy-profit-data` 键即可清空全部数据
 
 ## 利润计算逻辑

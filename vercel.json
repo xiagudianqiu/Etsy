@@ -1,0 +1,21 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "framework": "vite",
+  "functions": {
+    "api/queue-csv.js": { "maxDuration": 30 },
+    "api/cron-send.js": { "maxDuration": 60 },
+    "api/reset-quota.js": { "maxDuration": 30 }
+  },
+  "crons": [
+    {
+      "path": "/api/cron-send",
+      "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/reset-quota",
+      "schedule": "0 16 1 * *"
+    }
+  ]
+}

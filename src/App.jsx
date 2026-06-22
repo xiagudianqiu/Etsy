@@ -21,7 +21,9 @@ import { exportMonthToCSV } from './utils/exporter';
 import { exportToPDF } from './utils/pdfExporter';
 import PDFReportView from './components/PDFReportView';
 import PDFProgressOverlay from './components/PDFProgressOverlay';
-import { calculateOrderProfit } from './utils/profitCalculator';
+import { calculateProfit, calculateOrderProfit } from './utils/profitCalculator';
+import { sendCSVByEmail } from './utils/mailBackup';
+import { useAuth } from './hooks/useAuth';
 import { MoneyProvider } from './utils/MoneyContext';
 import { formatMoney } from './utils/currency';
 import { Sparkles, ArrowRight, FileText, FileDown } from 'lucide-react';
@@ -32,16 +34,19 @@ function App() {
   const [activePage, setActivePage] = useState('dashboard');
   const [showPDFReport, setShowPDFReport] = useState(false);
   const [pdfProgress, setPdfProgress] = useState(null);
+  const [mailStatus, setMailStatus] = useState(null);
 
+  const { user, signOut } = useAuth();
   const {
     availableMonths, selectedMonth, setSelectedMonth,
     selectedMonths, setSelectedMonths,
     currentMonthData, currentProfitData, currentFeeBreakdown, currentAdROI,
     allMonthsSummary,
     compareMode, setCompareMode, compareMonth, setCompareMonth, compareProfitData,
-    importMultipleCSV, deleteMonth, etsyData,
-    updateProductCosts, updateExchangeRate, updateConfigFields,
-    isLoading, error, setError
+    importMultipleCSV, deleteMonth, etsyData, reload,
+    updateProductCosts, updateExchangeRate, updateConfigFields, updateMailConfig,
+    quota, mailConfig,
+    isLoading, loadingData, error, setError
   } = useEtsyData();
 
   // 多选切换
@@ -77,6 +82,38 @@ function App() {
         setError(`部分文件导入失败: ${errors.map(e => e.file).join(', ')}`);
       } else if (results.length > 0) {
         setShowUploader(false);
+
+        // 自动邮件备份（异步，不阻塞）
+        if (mailConfig.enabled && mailConfig.to) {
+          setMailStatus({ type: 'sending', text: `正在暂存 ${results.length} 个文件到邮件队列...` });
+          // 并行发送所有成功导入的文件
+          const sendResults = await Promise.all(
+            results.map(r => {
+              const file = files.find(f => f.name === r.filename);
+              if (!file) return { ok: false, filename: r.filename, error: '文件未找到' };
+              const p = calculateProfit(r, etsyData.config?.products, etsyData.config?.exchangeRate);
+              return sendCSVByEmail(file, {
+                totalSales: p.totalSales,
+                profit: p.profit,
+                orderCount: p.orderCount
+              }).then(res => ({ ...res, filename: r.filename }));
+            })
+          );
+
+          const okCount = sendResults.filter(r => r.ok).length;
+          const failCount = sendResults.filter(r => !r.ok && !r.skipped).length;
+
+          if (okCount > 0 && failCount === 0) {
+            setMailStatus({ type: 'success', text: `✓ ${okCount} 个文件已暂存，今晚 23:00 统一发送到 ${mailConfig.to}` });
+          } else if (okCount > 0 && failCount > 0) {
+            setMailStatus({ type: 'error', text: `部分成功：${okCount} 已入队，${failCount} 失败` });
+          } else if (failCount > 0) {
+            setMailStatus({ type: 'error', text: `邮件入队失败：${sendResults.find(r => r.error)?.error}` });
+          }
+
+          // 8 秒后自动清除状态
+          setTimeout(() => setMailStatus(null), 8000);
+        }
       }
       return { results, errors };
     } catch (err) {
@@ -346,6 +383,9 @@ function App() {
         onSettingsClick={() => setShowSettings(true)}
         monthCount={availableMonths.length}
         orderCount={orderCount}
+        userEmail={user?.email}
+        onSignOut={signOut}
+        quota={quota}
       />
 
       <div className="pl-[220px]">
@@ -374,6 +414,23 @@ function App() {
             </div>
           )}
 
+          {/* 邮件备份状态提示 */}
+          {mailStatus && (
+            <div className={`card p-4 text-sm flex items-center justify-between fade-in ${
+              mailStatus.type === 'success' ? 'text-[var(--up)]' :
+              mailStatus.type === 'error' ? 'text-[var(--down)]' :
+              'text-[var(--gold-bright)]'
+            }`}>
+              <span className="flex items-center gap-2">
+                {mailStatus.type === 'sending' && (
+                  <div className="w-3.5 h-3.5 border-2 border-[var(--gold)] border-t-transparent rounded-full animate-spin" />
+                )}
+                {mailStatus.text}
+              </span>
+              <button onClick={() => setMailStatus(null)} className="text-xs underline opacity-70 hover:opacity-100">关闭</button>
+            </div>
+          )}
+
           {renderPage()}
         </main>
       </div>
@@ -383,10 +440,13 @@ function App() {
         onClose={() => setShowSettings(false)}
         config={etsyData.config}
         orders={allMonthsSummary?.allOrders || currentMonthData?.orders || []}
+        mailConfig={mailConfig}
+        onUpdateMailConfig={updateMailConfig}
+        quota={quota}
         onSave={(c) => {
-          updateProductCosts(c.products);
-          updateExchangeRate(c.exchangeRate);
           updateConfigFields({
+            products: c.products,
+            exchangeRate: c.exchangeRate,
             displayCurrency: c.displayCurrency,
             costCurrency: c.costCurrency,
             rates: c.rates

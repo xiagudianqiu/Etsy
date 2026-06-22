@@ -1,9 +1,9 @@
-import { useState, useCallback, useMemo } from 'react';
-import { useLocalStorage } from './useLocalStorage';
+import { useState, useCallback, useMemo, useEffect } from 'react';
+import { supabase } from '../utils/supabase';
+import { useAuth } from './useAuth';
 import { parseEtsyCSV } from '../utils/csvParser';
 import { calculateProfit, getFeeBreakdown, calculateAdROI } from '../utils/profitCalculator';
 
-const STORAGE_KEY = 'etsy-profit-data';
 const DEFAULT_CONFIG = {
   products: {
     '40oz Stanley LSF': 140,
@@ -20,39 +20,88 @@ const DEFAULT_CONFIG = {
   rates: { USD: 1, CNY: 7.2, EUR: 0.92, GBP: 0.79, JPY: 156, HKD: 7.8, SGD: 1.34 }
 };
 
+const QUOTA_UPLOAD = 30;
+const QUOTA_EMAIL = 31;
+
 export function useEtsyData() {
-  const [etsyData, setEtsyData] = useLocalStorage(STORAGE_KEY, {
+  const { user } = useAuth();
+
+  const [etsyData, setEtsyData] = useState({
     config: DEFAULT_CONFIG,
     months: {}
   });
-
-  const [selectedMonths, setSelectedMonths] = useState([]);  // 数组：支持多选
+  const [selectedMonths, setSelectedMonths] = useState([]);
   const [compareMode, setCompareMode] = useState(false);
   const [compareMonth, setCompareMonth] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingData, setLoadingData] = useState(true);  // 首次加载
   const [error, setError] = useState(null);
+  const [quota, setQuota] = useState({ uploads: 0, emails: 0, uploadLimit: QUOTA_UPLOAD, emailLimit: QUOTA_EMAIL });
+  const [mailConfig, setMailConfig] = useState({ enabled: false, to: '' });
 
-  // 获取所有已导入的月份
-  const availableMonths = useMemo(() => {
-    return Object.keys(etsyData.months).sort().reverse();
-  }, [etsyData.months]);
+  // ===== 加载用户数据（月份 + 配置 + 配额）=====
+  const loadUserData = useCallback(async () => {
+    if (!user || !supabase) return;
+    setLoadingData(true);
 
-  // 兼容旧 API：selectedMonth 是 selectedMonths 第一个
+    try {
+      // 并行加载 months 和 profile
+      const [monthsResp, profileResp] = await Promise.all([
+        supabase.from('months').select('*').eq('user_id', user.id),
+        supabase.from('profiles').select('*').eq('id', user.id).single()
+      ]);
+
+      // 月份 → 转成 { monthKey: {...} } 形态（兼容旧接口）
+      const months = {};
+      (monthsResp.data || []).forEach(row => {
+        months[row.month_key] = {
+          monthKey: row.month_key,
+          filename: row.filename,
+          importedAt: row.imported_at,
+          orders: row.orders || [],
+          summary: row.summary || {}
+        };
+      });
+
+      // 配置（合并默认值）
+      const profile = profileResp.data || {};
+      const config = { ...DEFAULT_CONFIG, ...(profile.config || {}) };
+
+      setEtsyData({ config, months });
+      setQuota({
+        uploads: profile.uploads_this_month || 0,
+        emails: profile.emails_this_month || 0,
+        uploadLimit: QUOTA_UPLOAD,
+        emailLimit: QUOTA_EMAIL
+      });
+      setMailConfig({
+        enabled: !!profile.mail_enabled,
+        to: profile.mail_to || ''
+      });
+    } catch (err) {
+      console.error('加载数据失败:', err);
+      setError('加载数据失败：' + err.message);
+    } finally {
+      setLoadingData(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    loadUserData();
+  }, [loadUserData]);
+
+  // ===== 派生数据（保持旧接口）=====
+  const availableMonths = useMemo(() => Object.keys(etsyData.months).sort().reverse(), [etsyData.months]);
+
   const selectedMonth = selectedMonths.length > 0 ? selectedMonths[0] : null;
-  const setSelectedMonth = useCallback((m) => {
-    setSelectedMonths(m ? [m] : []);
-  }, []);
+  const setSelectedMonth = useCallback((m) => setSelectedMonths(m ? [m] : []), []);
 
-  // 合并多月数据成单个 monthData（兼容所有展示组件）
   const currentMonthData = useMemo(() => {
     if (selectedMonths.length === 0) return null;
-    const monthsToMerge = selectedMonths
-      .map(k => etsyData.months[k])
-      .filter(Boolean);
+    const monthsToMerge = selectedMonths.map(k => etsyData.months[k]).filter(Boolean);
     if (monthsToMerge.length === 0) return null;
     if (monthsToMerge.length === 1) return monthsToMerge[0];
 
-    // 合并多个月：summary 求和、orders 拼接
     const allOrders = [];
     const mergedSummary = {
       totalSales: 0, totalFees: 0, totalTransactionFee: 0, totalProcessingFee: 0,
@@ -60,19 +109,15 @@ export function useEtsyData() {
       totalListingFee: 0, totalRefund: 0, otherFees: 0, paymentIncome: 0,
       netAmount: 0, totalAds: 0, orderCount: 0
     };
-
     monthsToMerge.forEach(md => {
       const s = md.summary || {};
-      Object.keys(mergedSummary).forEach(key => {
-        mergedSummary[key] += s[key] || 0;
-      });
+      Object.keys(mergedSummary).forEach(key => { mergedSummary[key] += s[key] || 0; });
       (md.orders || []).forEach(o => allOrders.push(o));
     });
 
     return {
       monthKey: selectedMonths.length === availableMonths.length
-        ? `全部 ${selectedMonths.length} 月`
-        : `${selectedMonths.length} 个月合计`,
+        ? `全部 ${selectedMonths.length} 月` : `${selectedMonths.length} 个月合计`,
       isMerged: true,
       mergedMonths: selectedMonths.slice().sort(),
       filename: monthsToMerge.map(m => m.filename).join(' + '),
@@ -82,37 +127,31 @@ export function useEtsyData() {
     };
   }, [selectedMonths, etsyData.months, availableMonths.length]);
 
-  // 设置对比月份的月份数据
   const compareMonthData = useMemo(() => {
     if (!compareMode || !compareMonth || !etsyData.months[compareMonth]) return null;
     return etsyData.months[compareMonth];
   }, [compareMode, compareMonth, etsyData.months]);
 
-  // 计算当前月份的利润数据
   const currentProfitData = useMemo(() => {
     if (!currentMonthData) return null;
     return calculateProfit(currentMonthData, etsyData.config.products, etsyData.config.exchangeRate);
   }, [currentMonthData, etsyData.config]);
 
-  // 计算对比月份的利润数据
   const compareProfitData = useMemo(() => {
     if (!compareMonthData) return null;
     return calculateProfit(compareMonthData, etsyData.config.products, etsyData.config.exchangeRate);
   }, [compareMonthData, etsyData.config]);
 
-  // 获取费用拆解
   const currentFeeBreakdown = useMemo(() => {
     if (!currentMonthData) return [];
     return getFeeBreakdown(currentMonthData);
   }, [currentMonthData]);
 
-  // 计算广告ROI
   const currentAdROI = useMemo(() => {
     if (!currentMonthData) return null;
     return calculateAdROI(currentMonthData);
   }, [currentMonthData]);
 
-  // 跨月汇总（仪表盘"全部月份"视图用）
   const allMonthsSummary = useMemo(() => {
     const months = Object.values(etsyData.months || {});
     if (months.length === 0) return null;
@@ -136,43 +175,37 @@ export function useEtsyData() {
       totalProcessingFee += Math.max(0, s.totalProcessingFee || 0);
       totalTax += Math.max(0, s.totalTax || 0);
       totalShipping += Math.max(0, s.totalShipping || 0);
-
       const p = calculateProfit(md, etsyData.config.products, etsyData.config.exchangeRate);
       totalProfit += p.profit;
       totalCostRMB += p.productCostRMB;
-
       (md.orders || []).forEach(o => allOrders.push(o));
     });
 
     const exRate = etsyData.config.exchangeRate || 7.2;
     return {
-      monthCount: months.length,
-      totalSales,
-      totalFees,
-      totalNet,
-      totalProfit,
+      monthCount: months.length, totalSales, totalFees, totalNet, totalProfit,
       profitRate: totalSales > 0 ? (totalProfit / totalSales) * 100 : 0,
       totalOrders,
       avgOrderValue: totalOrders > 0 ? totalSales / totalOrders : 0,
       avgMonthProfit: months.length > 0 ? totalProfit / months.length : 0,
-      productCostUSD: totalCostRMB / exRate,
-      productCostRMB: totalCostRMB,
-      totalEtsyAds,
-      totalOffsiteAds,
-      totalAds: totalEtsyAds + totalOffsiteAds,
-      totalRefund,
-      totalTransactionFee,
-      totalProcessingFee,
-      totalTax,
-      totalShipping,
+      productCostUSD: totalCostRMB / exRate, productCostRMB: totalCostRMB,
+      totalEtsyAds, totalOffsiteAds, totalAds: totalEtsyAds + totalOffsiteAds, totalRefund,
+      totalTransactionFee, totalProcessingFee, totalTax, totalShipping,
       adRate: totalSales > 0 ? ((totalEtsyAds + totalOffsiteAds) / totalSales) * 100 : 0,
       refundRate: totalSales > 0 ? (totalRefund / totalSales) * 100 : 0,
       allOrders
     };
   }, [etsyData.months, etsyData.config]);
 
-  // 导入 CSV 文件
+  // ===== 导入 CSV =====
   const importCSV = useCallback(async (file) => {
+    if (!user || !supabase) throw new Error('未登录');
+
+    // 配额检查
+    if (quota.uploads >= quota.uploadLimit) {
+      throw new Error(`本月上传配额已用完（${quota.uploadLimit} 个），下月 1 号自动重置`);
+    }
+
     setIsLoading(true);
     setError(null);
 
@@ -181,26 +214,34 @@ export function useEtsyData() {
       const parsedData = parseEtsyCSV(content, file.name);
 
       if (!parsedData.monthKey) {
-        console.error('解析结果:', parsedData);
-        throw new Error(`无法从文件名 "${file.name}" 提取月份信息。请确保文件名格式为: etsy_statement_2026_4.csv`);
+        throw new Error(`无法从文件名 "${file.name}" 提取月份。格式应为 etsy_statement_2026_4.csv`);
       }
 
-      // 检查是否有订单数据
-      if (!parsedData.orders || parsedData.orders.length === 0) {
-        console.warn(`文件 ${file.name} 没有解析出订单数据`);
-      }
+      // 写入 Supabase（upsert：同月份覆盖）
+      const { error: insertError } = await supabase
+        .from('months')
+        .upsert({
+          user_id: user.id,
+          month_key: parsedData.monthKey,
+          filename: parsedData.filename,
+          imported_at: parsedData.importedAt,
+          summary: parsedData.summary,
+          orders: parsedData.orders
+        }, { onConflict: 'user_id,month_key' });
 
-      // 更新数据
+      if (insertError) throw insertError;
+
+      // 更新本地状态
       setEtsyData(prev => ({
         ...prev,
-        months: {
-          ...prev.months,
-          [parsedData.monthKey]: parsedData
-        }
+        months: { ...prev.months, [parsedData.monthKey]: parsedData }
       }));
-
-      // 自动选中刚导入的月份（单选模式）
       setSelectedMonths([parsedData.monthKey]);
+
+      // 配额计数 +1（乐观更新）
+      setQuota(prev => ({ ...prev, uploads: prev.uploads + 1 }));
+      // 同步到数据库
+      await supabase.rpc('increment_upload_count', { p_user_id: user.id });
 
       return parsedData;
     } catch (err) {
@@ -209,13 +250,11 @@ export function useEtsyData() {
     } finally {
       setIsLoading(false);
     }
-  }, [setEtsyData]);
+  }, [user, quota]);
 
-  // 批量导入多个 CSV 文件
   const importMultipleCSV = useCallback(async (files) => {
     const results = [];
     const errors = [];
-
     for (const file of files) {
       try {
         const result = await importCSV(file);
@@ -224,104 +263,100 @@ export function useEtsyData() {
         errors.push({ file: file.name, error: err.message });
       }
     }
-
     return { results, errors };
   }, [importCSV]);
 
-  // 删除月份数据
-  const deleteMonth = useCallback((monthKey) => {
+  // ===== 删除月份 =====
+  const deleteMonth = useCallback(async (monthKey) => {
+    if (!user || !supabase) return;
+    await supabase.from('months').delete().eq('user_id', user.id).eq('month_key', monthKey);
+
     setEtsyData(prev => {
       const newMonths = { ...prev.months };
       delete newMonths[monthKey];
       return { ...prev, months: newMonths };
     });
 
-    // 从选中列表中移除
     setSelectedMonths(prev => {
       const filtered = prev.filter(k => k !== monthKey);
       if (filtered.length === 0) {
-        const remaining = Object.keys(etsyData.months).filter(k => k !== monthKey);
+        const remaining = availableMonths.filter(k => k !== monthKey);
         return remaining.length > 0 ? [remaining[0]] : [];
       }
       return filtered;
     });
-
     if (compareMonth === monthKey) setCompareMonth(null);
-  }, [setEtsyData, compareMonth, etsyData.months]);
+  }, [user, availableMonths, compareMonth]);
 
-  // 更新产品成本配置
+  // ===== 更新配置 =====
   const updateProductCosts = useCallback((newCosts) => {
     setEtsyData(prev => ({
       ...prev,
-      config: {
-        ...prev.config,
-        products: { ...prev.config.products, ...newCosts }
-      }
+      config: { ...prev.config, products: { ...prev.config.products, ...newCosts } }
     }));
-  }, [setEtsyData]);
+  }, []);
 
-  // 更新汇率
   const updateExchangeRate = useCallback((rate) => {
     setEtsyData(prev => ({
-      ...prev,
-      config: {
-        ...prev.config,
-        exchangeRate: parseFloat(rate) || 7.2
-      }
+      ...prev, config: { ...prev.config, exchangeRate: parseFloat(rate) || 7.2 }
     }));
-  }, [setEtsyData]);
+  }, []);
 
-  // 通用 config 字段更新（币种、汇率表等）
-  const updateConfigFields = useCallback((fields) => {
-    setEtsyData(prev => ({
-      ...prev,
-      config: { ...prev.config, ...fields }
+  const updateConfigFields = useCallback(async (fields) => {
+    setEtsyData(prev => ({ ...prev, config: { ...prev.config, ...fields } }));
+    // 持久化到 Supabase
+    if (user && supabase) {
+      const newConfig = { ...etsyData.config, ...fields };
+      await supabase.from('profiles').update({ config: newConfig }).eq('id', user.id);
+    }
+  }, [user, etsyData.config]);
+
+  // ===== 邮件备份配置 =====
+  const updateMailConfig = useCallback(async ({ mailEnabled, mailTo }) => {
+    if (!user || !supabase) return;
+    const update = {};
+    if (mailEnabled !== undefined) update.mail_enabled = mailEnabled;
+    if (mailTo !== undefined) update.mail_to = mailTo;
+    await supabase.from('profiles').update(update).eq('id', user.id);
+    // 同步本地状态
+    setMailConfig(prev => ({
+      enabled: mailEnabled !== undefined ? mailEnabled : prev.enabled,
+      to: mailTo !== undefined ? mailTo : prev.to
     }));
-  }, [setEtsyData]);
+  }, [user]);
 
-  // 清除所有数据
-  const clearAllData = useCallback(() => {
+  const clearAllData = useCallback(async () => {
+    if (!user || !supabase) return;
+    await supabase.from('months').delete().eq('user_id', user.id);
     setEtsyData({ config: DEFAULT_CONFIG, months: {} });
     setSelectedMonths([]);
     setCompareMonth(null);
     setCompareMode(false);
-  }, [setEtsyData]);
+  }, [user]);
 
   return {
     // 数据
     etsyData,
     availableMonths,
-    selectedMonth,
-    setSelectedMonth,
-    selectedMonths,
-    setSelectedMonths,
-    currentMonthData,
-    currentProfitData,
-    currentFeeBreakdown,
-    currentAdROI,
+    selectedMonth, setSelectedMonth,
+    selectedMonths, setSelectedMonths,
+    currentMonthData, currentProfitData, currentFeeBreakdown, currentAdROI,
     allMonthsSummary,
-
-    // 对比模式
-    compareMode,
-    setCompareMode,
-    compareMonth,
-    setCompareMonth,
-    compareMonthData,
-    compareProfitData,
+    compareMode, setCompareMode, compareMonth, setCompareMonth,
+    compareMonthData, compareProfitData,
 
     // 操作
-    importCSV,
-    importMultipleCSV,
-    deleteMonth,
-    updateProductCosts,
-    updateExchangeRate,
-    updateConfigFields,
-    clearAllData,
+    importCSV, importMultipleCSV, deleteMonth,
+    updateProductCosts, updateExchangeRate, updateConfigFields,
+    updateMailConfig, clearAllData,
+    reload: loadUserData,
+
+    // 配额
+    quota,
+    mailConfig,
 
     // 状态
-    isLoading,
-    error,
-    setError
+    isLoading, loadingData, error, setError
   };
 }
 

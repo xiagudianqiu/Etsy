@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { X, Save, RotateCcw, Trash2, Plus, Sparkles, RefreshCw, Tag, Coins } from 'lucide-react';
+import { X, Save, RotateCcw, Trash2, Plus, Sparkles, RefreshCw, Tag, Coins, Mail, Send, Info } from 'lucide-react';
 import { CURRENCIES, DEFAULT_RATES, fetchRates } from '../utils/currency';
+import { sendTestEmail } from '../utils/mailBackup';
 
 const DEFAULT_PRODUCTS = {
   '40oz Stanley LSF': 140,
@@ -12,7 +13,7 @@ const DEFAULT_PRODUCTS = {
   '32oz': 100
 };
 
-export default function SettingsModal({ isOpen, onClose, config, onSave, orders }) {
+export default function SettingsModal({ isOpen, onClose, config, onSave, orders, mailConfig, onUpdateMailConfig, quota }) {
   const [products, setProducts] = useState({});
   const [newName, setNewName] = useState('');
   const [newCost, setNewCost] = useState('');
@@ -297,6 +298,9 @@ export default function SettingsModal({ isOpen, onClose, config, onSave, orders 
               </button>
             </div>
           </section>
+
+          {/* ===== 邮件备份 ===== */}
+          <MailBackupSection mailConfig={mailConfig} updateMailConfig={onUpdateMailConfig} quota={quota} />
         </div>
 
         {/* 底部 */}
@@ -320,5 +324,135 @@ function SectionTitle({ icon: Icon, title, sub, noMargin }) {
       </div>
       {sub && <div className="text-[11px] text-[var(--text-tertiary)] mt-0.5 ml-6">{sub}</div>}
     </div>
+  );
+}
+
+// ===================================================================
+// 邮件备份配置（多用户版：数据来自 Supabase profiles 表）
+// ===================================================================
+function MailBackupSection({ mailConfig, updateMailConfig, quota }) {
+  const [localEnabled, setLocalEnabled] = useState(mailConfig?.enabled || false);
+  const [localTo, setLocalTo] = useState(mailConfig?.to || '');
+  const [testStatus, setTestStatus] = useState(null);
+
+  // 同步外部 mailConfig
+  useEffect(() => {
+    setLocalEnabled(mailConfig?.enabled || false);
+    setLocalTo(mailConfig?.to || '');
+  }, [mailConfig?.enabled, mailConfig?.to]);
+
+  const update = async (patch) => {
+    if (patch.enabled !== undefined) {
+      setLocalEnabled(patch.enabled);
+      await updateMailConfig({ mailEnabled: patch.enabled });
+    }
+    if (patch.to !== undefined) {
+      setLocalTo(patch.to);
+    }
+  };
+
+  // 邮箱输入失焦时保存
+  const handleToBlur = async () => {
+    if (localTo !== mailConfig?.to) {
+      await updateMailConfig({ mailTo: localTo });
+    }
+  };
+
+  const handleTest = async () => {
+    if (localTo !== mailConfig?.to) {
+      await updateMailConfig({ mailTo: localTo });
+    }
+    setTestStatus({ type: 'sending', text: '入队中...' });
+    const result = await sendTestEmail();
+    if (result.ok) {
+      setTestStatus({ type: 'success', text: `✓ 已入队，今晚 23:00 发送` });
+    } else {
+      setTestStatus({ type: 'error', text: `失败：${result.error}` });
+    }
+    setTimeout(() => setTestStatus(null), 8000);
+  };
+
+  const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(localTo);
+
+  return (
+    <section>
+      <div className="flex items-center justify-between mb-3">
+        <SectionTitle icon={Mail} title="邮件备份" sub="上传 CSV 后入队，每天 23:00 统一发送" noMargin />
+        <button
+          onClick={() => update({ enabled: !localEnabled })}
+          className={`relative w-11 h-6 rounded-full transition-colors ${localEnabled ? 'bg-[var(--gold)]' : 'bg-[var(--border-strong)]'}`}
+        >
+          <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${localEnabled ? 'translate-x-5' : ''}`} />
+        </button>
+      </div>
+
+      {localEnabled && (
+        <div className="space-y-3">
+          {/* 收件邮箱 */}
+          <div>
+            <label className="block text-xs text-[var(--text-tertiary)] mb-1.5">收件邮箱</label>
+            <input
+              type="email"
+              value={localTo}
+              onChange={e => setLocalTo(e.target.value)}
+              onBlur={handleToBlur}
+              placeholder="your-email@example.com"
+              className="w-full px-3 py-2 rounded-lg bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-primary)] text-sm outline-none focus:border-[var(--gold)] placeholder-[var(--text-tertiary)]"
+            />
+            <p className="text-[10px] text-[var(--text-muted)] mt-1">
+              失焦自动保存。注：默认 onboarding@resend.dev 只能发到你 Resend 账户邮箱
+            </p>
+          </div>
+
+          {/* 配额显示 */}
+          {quota && (
+            <div className="p-3 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[var(--text-secondary)]">本月邮件配额</span>
+                <span className="tabular-nums text-[var(--text-primary)] font-medium">
+                  {quota.emails} / {quota.emailLimit}
+                </span>
+              </div>
+              <div className="h-1.5 mt-2 rounded-full bg-[var(--bg)] overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-[#d4a056] to-[#f5b955]"
+                  style={{ width: `${Math.min(100, (quota.emails / quota.emailLimit) * 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* 测试按钮 */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleTest}
+              disabled={!validEmail || testStatus?.type === 'sending'}
+              className="btn-ghost text-xs disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Send className="w-3 h-3" />
+              {testStatus?.type === 'sending' ? '入队中...' : '测试入队'}
+            </button>
+            {testStatus && (
+              <span className={`text-xs ${
+                testStatus.type === 'success' ? 'text-[var(--up)]' :
+                testStatus.type === 'error' ? 'text-[var(--down)]' :
+                'text-[var(--gold-bright)]'
+              }`}>
+                {testStatus.text}
+              </span>
+            )}
+          </div>
+
+          {/* 发送机制说明 */}
+          <div className="p-3 rounded-lg bg-[rgba(212,160,86,0.06)] border border-[rgba(212,160,86,0.15)] flex gap-2">
+            <Info className="w-3.5 h-3.5 text-[var(--gold)] flex-shrink-0 mt-0.5" />
+            <div className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+              <div className="font-medium text-[var(--gold-bright)] mb-1">⏰ 每天 23:00 定时批量发送</div>
+              上传的 CSV 不会立即发，而是暂存在服务器队列，当天 23:00（北京时间）统一打包成一封邮件发到你的邮箱。
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
