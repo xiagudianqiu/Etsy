@@ -1,286 +1,207 @@
 # Etsy Profit Dashboard
 
-Etsy 销售数据分析 · 多用户利润仪表盘
+> Etsy 销售数据多用户利润分析仪表盘 · 暖金高级风 · React + Supabase
 
-为 Etsy 卖家打造的一站式利润分析工具。导入月度账单 CSV，自动计算真实到手利润，
-按多月合并、可调币种、批量产品成本配置，并生成专业 PDF 报告。
+为 Etsy 卖家打造的一站式利润分析平台。导入月度账单 CSV，自动计算真实到手利润，
+按多月合并、可调币种、批量产品成本配置，生成专业 PDF 报告，并可每天 23:00 自动邮件备份。
 
-支持多用户使用——每个卖家账号独立隔离，支持每天 23:00 自动邮件备份 CSV。
+**多用户架构**：每个卖家账号独立隔离，支持几十~几百用户同时使用。
 
-## 两种部署模式
+🌐 在线版本：部署到 Vercel 后访问你的域名（见 [部署文档](./docs/DEPLOYMENT.md)）
 
-### 模式 A: 单用户（最简单，本地或静态托管）
-- 数据存浏览器 LocalStorage
-- 无需后端，双击 index.html 即可用
-- 适合个人使用
+---
 
-### 模式 B: 多用户 SaaS（本仓库当前版本）
-- Supabase 用户认证 + 数据库（按 user_id RLS 隔离）
-- 邮件备份：Vercel Cron 每天 23:00 批量发送
-- 配额限制：每月 30 次上传 + 31 封邮件
-- 适合几十~几百用户共享
-- **详细部署见 [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)**
+## 截图预览
 
-## 功能
+- 🔐 邮箱密码登录页（暖金 + 渐变光晕）
+- 📊 仪表盘：HERO 焦点 + 4 KPI 卡片（带 sparkline） + 健康度评分 + 现金流时间线
+- 📅 销售日历热力图（GitHub-style）+ 月份翻阅
+- 📦 产品利润分析（冠军徽章）
+- 📋 订单明细（分页/搜索/排序）
+- ⚙ 设置：7 种币种切换、产品成本管理、邮件备份配置
+- 📄 PDF 导出（带实时进度遮罩）
 
-### 数据导入
-- 拖拽批量上传 Etsy Monthly Statement CSV
-- 智能解析：自动识别订单、关联费用（两遍扫描处理 Etsy 行序）
-- 自动从订单标题识别产品类型
+---
 
-### 仪表盘
-- **HERO 焦点区** — 巨大净利润数字 + 环比 + 智能洞察
-- **KPI 行** — 销售额/到账/利润/客单价，每张卡带 sparkline 微图
-- **运营健康度** — 4 维加权评分（利润率/广告占比/退款率/利润规模）
-- **现金流时间线** — 模拟 Etsy 14 天打款延迟
-- **费用拆解** — 9 类费用透明展示
-- **销售日历热力图** — GitHub-style 按日上色 + 月份翻阅
+## 功能清单
 
-### 月份选择
-- 单选 / 多选 / 全部 — 所有数据自动合并视图
+### 📥 数据导入
+- 拖拽 / 点击批量上传 Etsy Monthly Statement CSV
+- 智能解析：两遍扫描处理 Etsy 行序问题（费用行先于 Sale 行）
+- 自动从 Transaction fee 标题识别产品类型（如 `40oz Stanley LSF`、`64oz Stanley`、`32oz 粉色蝴蝶结`）
+- 每个文件独立显示状态（✓ 成功 / ✕ 失败 + 错误原因）
 
-### 成本与广告
-- 产品成本管理 — 自动从订单发现产品 + 多币种输入
-- 成本敏感度模拟 — 滑块调成本/汇率，实时看利润变化
-- 广告 ROI 分析 — 站内外广告效率
+### 📊 仪表盘
+- **HERO 焦点区** — 巨大净利润数字 + 环比 + 自动洞察（手续费占比/明星产品/广告效率）
+- **KPI 行** — 销售额 / 净利润 / 到账 / 客单价 / 订单数，每张卡带 sparkline 微图
+- **运营健康度** — 4 维加权评分（利润率 35% + 广告占比 25% + 退款率 20% + 利润规模 20%）
+- **现金流时间线** — 模拟 Etsy 14 天打款延迟，区分"本月已到账"vs"等待到账"
+- **费用拆解** — 9 类费用全透明（手续费/处理费/税/运费/站内广告/站外广告/Listing/退款/其他）
+- **销售日历热力图** — GitHub-style 按日上色，悬停看订单明细
+- **月度趋势柱状图** — 当前月金色高亮
+- **产品冠军表** — 按利润排序，第一名带奖杯徽章
+- **订单明细表** — 分页 / 搜索 / 排序
 
-### 多币种
-- 7 种币种切换：USD/CNY/EUR/GBP/JPY/HKD/SGD
-- 实时汇率获取（多 API 容灾）
-- 切换瞬间所有金额按汇率联动
+### 📅 月份选择
+- **单选** — 看单月数据
+- **多选** — 选两个或多个月，自动合并视图
+- **全部 N 月** — 一键看所有数据合计
+- KPI 卡片在多月模式自动显示「月均」+「累计」字段
 
-### 导出
-- CSV 月度报表
-- 专业 PDF 报告（区块化截图，避免分页切割，带实时进度）
+### 💱 多币种支持
+- 7 种货币切换：USD / CNY / EUR / GBP / JPY / HKD / SGD
+- 实时汇率获取（多 API 容灾：open.er-api.com + exchangerate-api.com）
+- 切换瞬间所有金额（仪表盘 / 订单 / 产品 / 费用 / PDF）按汇率联动
+- 顶栏快速切换器 + 设置里完整切换
+
+### 🏷 产品成本管理
+- 设置面板自动扫描订单，发现未配置的产品 → 一键「全部添加」
+- 多币种输入成本（默认 CNY），内部自动换算 USD 存储
+- 成本敏感度模拟器：拖滑块 ±¥30/件 或 ±0.5 汇率，实时看利润变化
+
+### 📨 邮件备份（可选）
+- 上传 CSV 后入队到 Supabase `mail_queue` 表
+- Vercel Cron 每天 23:00（北京时间）批量打包成一封邮件发到用户邮箱
+- 邮件正文含文件清单 + 当日合计销售/利润/订单数
+- 多个 CSV 作为多附件（不会刷屏）
+
+### 📤 报表导出
+- **CSV 导出** — 月度报表（概览 + 费用拆解 + 订单明细）
+- **PDF 导出** — 区块化设计，避免分页切割，带实时进度遮罩，浅色专业风
+
+### 🔐 多用户隔离
+- Supabase Auth 邮箱密码登录
+- Row Level Security（RLS）从数据库层强制隔离 — 任何查询自动带 `where user_id = current_user`
+- 每月配额：30 次上传 + 31 封邮件，每月 1 号自动重置
+- 侧边栏显示当前用户邮箱 + 配额进度条 + 登出按钮
+
+---
 
 ## 技术栈
 
-- **React 19** + **Vite** + **Tailwind CSS 4**
-- **Recharts** — 图表与 sparkline
-- **PapaParse** — CSV 解析
-- **jsPDF** + **html2canvas** — PDF 导出
-- **LocalStorage** — 本地数据持久化（无后端、无数据库）
+| 类别 | 技术 |
+|------|------|
+| 前端 | React 19, Vite 7, Tailwind CSS 4 |
+| 数据 | Supabase（PostgreSQL + Auth + RLS） |
+| 图表 | Recharts 3 |
+| CSV | PapaParse |
+| PDF | jsPDF + html2canvas（区块化截图） |
+| 后端 | Vercel Serverless Functions |
+| 邮件 | Resend |
+| 部署 | Vercel（含 Cron） |
+| 图标 | Lucide React |
 
-## 环境要求
-
-- Node.js ≥ 18
-- npm ≥ 9（或 pnpm / yarn）
-
-## 开发
-
-```bash
-# 1. 安装依赖
-npm install
-
-# 2. 启动开发服务器（热更新）
-npm run dev
-# → 访问 http://localhost:5173
-
-# 3. 生产构建
-npm run build
-# → 输出到 dist/
-
-# 4. 本地预览生产构建
-npm run preview
-
-# 5. 代码检查
-npm run lint
-```
-
-## 使用说明
-
-### 第一次使用
-
-1. **导入数据** — 点击右上角「导入」按钮，把 Etsy Monthly Statement CSV 拖进去
-   - 文件名格式需为 `etsy_statement_2026_4.csv`（程序从文件名提取月份）
-   - 支持一次拖入多个文件批量导入
-2. **配置成本** — 点右上角齿轮 → 设置
-   - 选择「成本输入币种」（默认人民币）
-   - 系统会自动发现订单里的产品，点「全部添加」后输入每个产品的成本
-   - 点「刷新汇率」获取实时汇率
-3. **查看仪表盘** — 所有利润数据自动计算
-
-### 月份选择
-
-- 顶部月份栏：点单个月份看单月，点多个月看合计，点「全部 N 月」看所有
-- 日历组件右上角有独立的翻页器（不影响全局选择）
-
-### 导出报表
-
-- **CSV** — 月份栏的「CSV」按钮，下载该月完整明细
-- **PDF** — 月份栏的「PDF」按钮，下载专业报告（带进度提示）
-
-## 部署
-
-### 静态托管（推荐）
-
-构建后 `dist/` 是纯静态文件，可托管到任何静态服务：
-
-**Vercel**
-```bash
-npm i -g vercel
-vercel
-```
-
-**Netlify**
-```bash
-npm i -g netlify-cli
-netlify deploy --prod --dir=dist
-```
-
-**GitHub Pages**
-```bash
-npm run build
-# 把 dist/ 内容推到 gh-pages 分支
-```
-
-**本地直接打开**
-```bash
-npm run build
-# dist/ 文件夹双击 index.html 即可用（注：需配置 base 路径或用 preview）
-npm run preview
-```
-
-### 自定义构建
-
-修改 `vite.config.js` 可调整构建配置：
-```js
-export default defineConfig({
-  base: '/your-sub-path/',  // 部署到子路径时
-  plugins: [react(), tailwindcss()],
-})
-```
+---
 
 ## 项目结构
 
 ```
-src/
-├── components/
-│   ├── Sidebar.jsx          # 左侧导航（三大块）
-│   ├── Topbar.jsx           # 顶栏 + 币种切换 + 导入按钮
-│   ├── MonthSelector.jsx    # 月份多选 + 全部 + 对比
-│   ├── HeroSection.jsx      # 净利润焦点区
-│   ├── KPIRow.jsx           # 4 张 KPI 卡片
-│   ├── KPICard.jsx          # 单张 KPI 卡（含 sparkline）
-│   ├── Sparkline.jsx        # 通用微图
-│   ├── HealthScore.jsx      # 运营健康度评分
-│   ├── CashflowTimeline.jsx # 现金流时间线
-│   ├── FeeBreakdown.jsx     # 费用拆解
-│   ├── SalesHeatmap.jsx     # 销售日历热力图
-│   ├── MonthlyTrendChart.jsx# 月度趋势柱状图
-│   ├── ProductBreakdown.jsx # 产品利润分析
-│   ├── OrderList.jsx        # 订单明细表（分页）
-│   ├── RecentOrders.jsx     # 最新订单卡片
-│   ├── CostSensitivity.jsx  # 成本敏感度模拟
-│   ├── SettingsModal.jsx    # 设置（币种/汇率/产品成本）
-│   ├── FileUploader.jsx     # CSV 拖拽上传
-│   ├── PDFReportView.jsx    # PDF 报表视图
-│   └── PDFProgressOverlay.jsx # PDF 导出进度
-├── hooks/
-│   ├── useEtsyData.js       # 核心数据管理（含多月合并）
-│   └── useLocalStorage.js   # LocalStorage 封装
-├── utils/
-│   ├── csvParser.js         # CSV 解析（两遍扫描）
-│   ├── profitCalculator.js  # 利润计算
-│   ├── dailyAggregator.js   # 日聚合（sparkline 数据源）
-│   ├── currency.js          # 多币种 + 汇率获取
-│   ├── MoneyContext.jsx     # 货币上下文
-│   ├── exporter.js          # CSV 导出
-│   └── pdfExporter.js       # PDF 导出（区块化）
-├── App.jsx
-├── main.jsx
-└── index.css                # 暖金主题样式
+etsy-profit-dashboard/
+├── api/                              # Vercel Serverless 函数
+│   ├── _lib/supabase.js              # 服务端 admin 客户端
+│   ├── queue-csv.js                  # CSV 入队（身份验证+配额检查）
+│   ├── cron-send.js                  # 每天 23:00 批量发送
+│   └── reset-quota.js                # 每月 1 号重置配额
+├── docs/
+│   └── DEPLOYMENT.md                 # 部署指南
+├── public/                           # 静态资源
+├── src/
+│   ├── components/                   # React 组件
+│   │   ├── AuthGuard.jsx             # 登录守卫
+│   │   ├── AuthPage.jsx              # 登录/注册页
+│   │   ├── Sidebar.jsx               # 侧边栏（用户信息 + 配额）
+│   │   ├── Topbar.jsx                # 顶栏（币种切换 + 导入）
+│   │   ├── MonthSelector.jsx         # 月份多选 + 全部 + 对比
+│   │   ├── HeroSection.jsx           # HERO 焦点区
+│   │   ├── KPIRow.jsx                # KPI 行（带 sparkline）
+│   │   ├── HealthScore.jsx           # 健康度评分
+│   │   ├── CashflowTimeline.jsx      # 现金流时间线
+│   │   ├── FeeBreakdown.jsx          # 费用拆解
+│   │   ├── SalesHeatmap.jsx          # 销售日历热力图
+│   │   ├── MonthlyTrendChart.jsx     # 月度趋势柱状图
+│   │   ├── ProductBreakdown.jsx      # 产品利润分析
+│   │   ├── OrderList.jsx             # 订单明细表
+│   │   ├── RecentOrders.jsx          # 最新订单卡片
+│   │   ├── CostSensitivity.jsx       # 成本敏感度模拟
+│   │   ├── SettingsModal.jsx         # 设置面板
+│   │   ├── FileUploader.jsx          # CSV 拖拽上传
+│   │   ├── PDFReportView.jsx         # PDF 报表视图
+│   │   ├── PDFProgressOverlay.jsx    # PDF 导出进度
+│   │   └── ...
+│   ├── hooks/
+│   │   ├── useAuth.js                # 认证 hook
+│   │   └── useEtsyData.js            # 核心数据管理（Supabase）
+│   ├── utils/
+│   │   ├── supabase.js               # Supabase 客户端
+│   │   ├── csvParser.js              # CSV 解析（两遍扫描）
+│   │   ├── profitCalculator.js       # 利润计算
+│   │   ├── dailyAggregator.js        # 日聚合（sparkline 数据）
+│   │   ├── currency.js               # 多币种 + 汇率
+│   │   ├── MoneyContext.jsx          # 货币上下文
+│   │   ├── mailBackup.js             # 邮件备份调用
+│   │   ├── exporter.js               # CSV 导出
+│   │   └── pdfExporter.js            # PDF 导出
+│   ├── App.jsx
+│   ├── main.jsx                      # 顶层（含 AuthGuard）
+│   └── index.css                     # 暖金主题
+├── supabase/
+│   └── migrations/
+│       └── 0001_init.sql             # 数据库迁移（建表 + RLS + 函数）
+├── .env.example                      # 环境变量模板
+├── .gitignore                        # 已排除 *.csv 等
+├── vercel.json                       # Vercel 配置 + Cron
+├── package.json
+└── README.md                         # 本文件
 ```
 
-## 邮件备份 (Vercel + Resend + Vercel KV)
+---
 
-可选功能：上传的 CSV **暂存到服务器队列，每天 23:00（北京时间）自动打包成一封邮件**发送到你邮箱，作为云端备份。
+## 本地开发
 
-### 工作原理
+### 环境要求
+- Node.js ≥ 18
+- npm ≥ 9
+- Supabase 账号（免费）
 
+### 步骤
+
+```bash
+# 1. 克隆仓库
+git clone https://github.com/xiagudianqiu/Etsy.git
+cd Etsy
+
+# 2. 安装依赖
+npm install
+
+# 3. 配置环境变量
+cp .env.example .env.local
+# 编辑 .env.local 填入 Supabase URL 和 anon key（详见部署文档）
+
+# 4. 在 Supabase 后台跑 supabase/migrations/0001_init.sql
+
+# 5. 启动 dev server
+npm run dev
+# → 访问 http://localhost:5173
 ```
-上传 CSV（浏览器）
-   ↓ POST /api/queue-csv
-Vercel KV 存储（按 邮箱+日期 分组）
-   ↓ 等待
-每天 23:00 Vercel Cron 触发
-   ↓ GET /api/cron-send
-读取当日所有 CSV → 打包多附件邮件
-   ↓ Resend API
-你的邮箱
+
+详细的 Supabase 配置见 [部署文档](./docs/DEPLOYMENT.md)。
+
+### 其他命令
+```bash
+npm run build       # 生产构建
+npm run preview     # 本地预览生产构建
+npm run lint        # 代码检查
 ```
 
-API Key、KV Token 均存在 Vercel 环境变量，**不暴露给前端**。
-
-### 设置步骤（一次性，约 15 分钟）
-
-#### 1. 注册 Resend（免费 3000 封/月）
-
-1. 打开 https://resend.com → Sign Up
-2. 左侧 **API Keys** → **Create API Key**（权限选 Sending access）
-   - 复制生成的 Key（形如 `re_xxxxxxxx`），只显示一次
-3. 默认可用 `onboarding@resend.dev` 发件，**只能发到你 Resend 账户邮箱**
-   - 想发到任意邮箱：需在 Domains 添加并验证自有域名
-
-#### 2. 创建 Vercel KV 数据库（免费）
-
-部署后在 Vercel 后台：
-1. 进入项目 → **Storage** 标签 → **Create Database** → 选 **KV**
-2. 名字随便（如 `etsy-mail-queue`）→ 创建
-3. 创建后点 **Connect to Project**，自动注入环境变量 `KV_REST_API_URL` / `KV_REST_API_TOKEN`
-
-#### 3. 部署到 Vercel
-
-1. https://vercel.com → Continue with GitHub → 导入 `Etsy` 仓库
-2. **Configure Project** 页面添加环境变量：
-   - `RESEND_API_KEY` = `re_xxxxxxxx`
-   - `RESEND_FROM_EMAIL` = `onboarding@resend.dev`（或已验证域名邮箱）
-   - `CRON_SECRET` = 自己设一个随机字符串（如 `my-secret-123`，防止外部恶意触发 cron）
-   - （KV 变量已在上一步自动注入）
-3. **Deploy** → 等 1 分钟
-4. Vercel 会自动识别 `vercel.json` 里的 cron 配置，每天 23:00 自动跑
-
-#### 4. 启用邮件备份
-
-1. 打开你的 Vercel 部署地址
-2. 设置（齿轮）→「邮件备份」区 → 开关打开 → 填收件邮箱
-3. 点「测试入队」验证连通性（测试文件当晚 23:00 发出）
-4. 保存
-
-之后**每次上传 CSV 自动入队**，当天 23:00 统一打包发送（多 CSV 作为一封邮件的多附件）。
-
-### 手动立即触发发送
-
-不想等到 23:00，可手动访问：
-```
-https://你的部署地址/api/cron-send?token=你的CRON_SECRET
-```
-会立即把队列里所有 CSV 发送并清空队列。
-
-### 注意事项
-
-- **API Key / KV Token 永远不要写在前端代码或推到 GitHub**
-- 本地 `npm run dev` 模式下邮件功能会报错（接口不存在），属正常
-- Vercel 免费层：Cron 每天最多 2 个任务（本功能只用 1 个）、KV 256MB（CSV 远远用不完）
-- Vercel Cron 有约 ±5 分钟误差，23:00 可能 22:55 或 23:05 跑
-- 不想用了：关设置开关 + 在 Vercel 后台删除 cron 即可
-- 修改发送时间：编辑 `vercel.json` 里 `schedule` 字段（UTC 时间，北京=UTC+8）
-
-## 数据与隐私
-
-- **所有数据保存在浏览器 LocalStorage**，不上传服务器（除非主动启用邮件备份）
-- `*.csv` 在 `.gitignore` 中排除，销售数据不会被提交到 git
-- 汇率获取走公开 API（open.er-api.com），只请求汇率数字，不发送任何业务数据
-- 邮件备份（可选）会把 CSV 内容存到 Vercel KV 并经 Resend 发送
-- 清除浏览器数据 / 删除 LocalStorage 的 `etsy-profit-data` 键即可清空全部数据
+---
 
 ## 利润计算逻辑
 
 ```
-净利润 = Etsy 到账净额(Net) − 产品成本(USD)
+净利润 = Etsy 到账净额 − 产品成本(USD)
 
 其中：
-  Etsy 到账净额 = 销售额 − 所有 Etsy 费用
+  Etsy 到账净额 = 销售额 − 所有 Etsy 费用（手续费+处理费+税+运费+广告+退款...）
   产品成本 = 各订单产品成本之和（按配置币种换算为 USD）
 
 利润率 = 净利润 / 销售额 × 100%
@@ -288,10 +209,54 @@ https://你的部署地址/api/cron-send?token=你的CRON_SECRET
 
 费用类别（9 类）：交易手续费、处理费、销售税、运费标签、站内广告、站外广告、上架费、退款、其他。
 
+---
+
+## 数据隐私
+
+- ✅ **多用户隔离**：Supabase RLS 从数据库层保证任何用户只能看到自己的数据
+- ✅ **本地优先**：所有计算在浏览器完成，不依赖第三方分析服务
+- ✅ **CSV 排除**：`.gitignore` 已排除 `*.csv`，销售数据不会被提交到 Git
+- ✅ **可关闭邮件备份**：默认关闭，用户在设置中手动开启
+- ⚠ **数据控制者**：多用户模式下，部署者承担数据合规责任，建议加隐私政策页
+
+---
+
+## 已知限制
+
+| 项 | 限制 | 说明 |
+|---|---|---|
+| Supabase 免费层 | 500MB DB + 50K MAU | 几百用户够用 |
+| Vercel 免费层 | 100GB 流量 + 100万函数调用 | 完全够 |
+| Resend 免费层 | 3000 封邮件/月 | 约 100 用户 × 30 封 = 临界 |
+| 单 CSV 大小 | < 5 MB | Etsy 月账单一般 < 50 KB |
+| 单次上传 | 多个文件 | 已支持批量 |
+
+---
+
+## 部署
+
+部署到 Vercel（让别人能访问）的完整步骤见 **[docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)**。
+
+简要：
+1. 注册 Supabase → 跑 SQL 建表
+2. 注册 Resend → 拿邮件 API Key
+3. 部署 Vercel → 配 6 个环境变量
+4. 访问你的 Vercel 域名
+
+---
+
 ## 许可证
 
 MIT License — 详见 [LICENSE](./LICENSE)
 
 ---
+
+## 致谢
+
+- [Supabase](https://supabase.com) — 开源 Firebase 替代
+- [Vercel](https://vercel.com) — 免费托管 + Serverless
+- [Resend](https://resend.com) — 现代邮件 API
+- [Recharts](https://recharts.org) — React 图表
+- 暖金主题配色灵感来自 Linear 与高端金融报表
 
 为 LumiFlask 店铺打造 · Built with [Claude Code](https://claude.com/claude-code)
