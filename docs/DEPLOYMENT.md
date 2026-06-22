@@ -192,6 +192,7 @@ npm run dev
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase Secret key | 服务端绕过 RLS |
 | `RESEND_API_KEY` | Resend API Key | 发邮件 |
 | `RESEND_FROM_EMAIL` | `onboarding@resend.dev` 或已验证域名 | 发件人 |
+| `ADMIN_EMAIL` | 你的收件邮箱（如 `you@example.com`） | CSV 自动备份接收方 |
 | `CRON_SECRET` | 自己设的随机串，如 `my-secret-xyz-123` | 防 cron 被恶意触发 |
 
 ### 4.4 部署

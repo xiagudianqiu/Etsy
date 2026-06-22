@@ -75,7 +75,7 @@ export default async function handler(req, res) {
         const totalProfit = group.items.reduce((s, it) => s + (it.summary?.profit || 0), 0);
 
         const fileList = group.items.map(it =>
-          `<li style="padding:4px 0"><strong>${it.filename}</strong> · 销售 $${(it.summary?.totalSales || 0).toFixed(2)} · ${it.summary?.orderCount || 0} 单 · 利润 $${(it.summary?.profit || 0).toFixed(2)}</li>`
+          `<li style="padding:4px 0"><strong>${it.filename}</strong> · 销售 $${(it.summary?.totalSales || 0).toFixed(2)} · ${it.summary?.orderCount || 0} 单 · 利润 $${(it.summary?.profit || 0).toFixed(2)}${it.summary?.user_email ? ` · 用户 ${it.summary.user_email}` : ''}</li>`
         ).join('');
 
         const html = `
