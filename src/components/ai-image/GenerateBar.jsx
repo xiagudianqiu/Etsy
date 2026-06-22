@@ -383,7 +383,7 @@ export default function GenerateBar({ aiModels, selectedPrompt, onClearPrompt, o
               className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {generating ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /> 生成中...（约 10-30 秒）</>
+                <><Loader2 className="w-4 h-4 animate-spin" /> 生成中...（任务排队处理，约 15-60 秒）</>
               ) : noModels ? (
                 <><AlertCircle className="w-4 h-4" /> 请先在设置配置模型</>
               ) : (
