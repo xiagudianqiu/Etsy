@@ -69,6 +69,9 @@ export async function generateImage(apiKey, prompt, opts = {}) {
 
     const data = await resp.json().catch(() => ({}));
 
+    // 调试：打印真实返回（F12 Console 可见）
+    console.log('[AI 生图] 提交响应:', data);
+
     // 模式 1：同步返回图片（OpenAI 风格 data[0].url / b64_json）
     const syncImage = data.data?.[0] || data.images?.[0] || data.output?.[0];
     if (syncImage) {
@@ -79,11 +82,12 @@ export async function generateImage(apiKey, prompt, opts = {}) {
     }
 
     // 模式 2：异步任务（EvoLink 风格，返回 task id）
-    const taskId = data.id || data.task_id;
+    const taskId = data.id || data.task_id || data.taskId;
     if (taskId) {
       // 从 endpoint 推导任务查询 URL
       const base = endpoint.replace(/\/v1\/.*$/, '/v1');
       const taskUrl = `${base}/tasks/${taskId}`;
+      console.log('[AI 生图] 异步任务 ID:', taskId, '查询 URL:', taskUrl);
       return await pollTask(taskUrl, apiKey);
     }
 

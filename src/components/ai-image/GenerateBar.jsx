@@ -149,7 +149,9 @@ export default function GenerateBar({ aiModels, selectedPrompt, onClearPrompt, o
         generatedAt: new Date().toISOString()
       });
     } else {
-      setError(r.error);
+      // 错误时附带原始返回，方便排查
+      setError(r.raw ? `${r.error} | 返回: ${JSON.stringify(r.raw).slice(0, 200)}` : r.error);
+      console.log('[AI 生图] 失败详情:', r);
     }
     setGenerating(false);
   };
