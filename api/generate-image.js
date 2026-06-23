@@ -22,7 +22,8 @@ export default async function handler(req, res) {
       apiKey, model = 'gpt-image-2', prompt, size = '1:1',
       quality = 'high', style, responseFormat = 'url',
       endpoint = 'https://image.codesonline.dev/v1/images/generations',
-      refImages = []
+      refImages = [],
+      upscale
     } = req.body || {};
 
     if (!apiKey) return res.status(400).json({ error: '缺少 API Key' });
@@ -40,6 +41,7 @@ export default async function handler(req, res) {
       formData.append('quality', quality);
       formData.append('response_format', responseFormat);
       if (style) formData.append('style', style);
+      if (upscale) formData.append('upscale', upscale);
 
       refImages.forEach((img, i) => {
         const buffer = Buffer.from(img.content, 'base64');
@@ -60,6 +62,7 @@ export default async function handler(req, res) {
       // 文生图：JSON
       const body = { model, prompt, size, quality, n: 1, response_format: responseFormat };
       if (style) body.style = style;
+      if (upscale) body.upscale = upscale;
 
       apiResp = await fetch(endpoint, {
         method: 'POST',
