@@ -30,6 +30,7 @@ export function useEtsyData() {
     config: DEFAULT_CONFIG,
     months: {}
   });
+  const [aiModels, setAiModels] = useState([]);  // 独立字段，不嵌在 config 里
   const [selectedMonths, setSelectedMonths] = useState([]);
   const [compareMode, setCompareMode] = useState(false);
   const [compareMonth, setCompareMonth] = useState(null);
@@ -65,13 +66,12 @@ export function useEtsyData() {
 
       // 配置（合并默认值）
       const profile = profileResp.data || {};
-      const config = {
-        ...DEFAULT_CONFIG,
-        ...(profile.config || {}),
-        aiModels: profile.ai_models || []  // AI 生图模型预设数组
-      };
+      const cleanConfig = { ...(profile.config || {}) };
+      delete cleanConfig.aiModels;  // 删除冗余，aiModels 走独立字段
+      const config = { ...DEFAULT_CONFIG, ...cleanConfig };
 
       setEtsyData({ config, months });
+      setAiModels(profile.ai_models || []);
       setQuota({
         uploads: profile.uploads_this_month || 0,
         emails: profile.emails_this_month || 0,
@@ -318,8 +318,12 @@ export function useEtsyData() {
   // ===== AI 生图模型配置 =====
   const updateAiModels = useCallback(async (models) => {
     if (!user || !supabase) return;
-    setEtsyData(prev => ({ ...prev, config: { ...prev.config, aiModels: models } }));
-    await supabase.from('profiles').update({ ai_models: models }).eq('id', user.id);
+    setAiModels(models);
+    const { error } = await supabase
+      .from('profiles')
+      .update({ ai_models: models })
+      .eq('id', user.id);
+    if (error) console.error('保存模型失败:', error);
   }, [user]);
 
   // ===== 邮件备份配置 =====
@@ -348,6 +352,7 @@ export function useEtsyData() {
   return {
     // 数据
     etsyData,
+    aiModels,
     availableMonths,
     selectedMonth, setSelectedMonth,
     selectedMonths, setSelectedMonths,

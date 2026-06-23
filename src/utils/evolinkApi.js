@@ -1,13 +1,16 @@
 /**
  * AI 图像生成 API 调用封装
- * 支持 EvoLink 异步任务模式（提交 → 轮询 → 拿图）+ OpenAI 同步模式
+ *
+ * 通过 /api/generate-image 代理转发（解决浏览器 CORS 限制）
+ * API Key 在请求体里传给代理，代理再调真实 API
  */
+import { supabase } from './supabase';
 
 /**
  * 生成图片
- * @param {string} apiKey
- * @param {string} prompt
- * @param {object} opts - { size, quality, model, endpoint, refImages }
+ * @param {string} apiKey - 用户的 API Key
+ * @param {string} prompt - 提示词
+ * @param {object} opts - { size, quality, model, endpoint, refImages, style, responseFormat }
  */
 export async function generateImage(apiKey, prompt, opts = {}) {
   if (!apiKey) {
@@ -15,132 +18,79 @@ export async function generateImage(apiKey, prompt, opts = {}) {
   }
 
   const {
-    size = '1024x1024',
-    quality = 'auto',
+    size = '1:1',
+    quality = 'high',
     model = 'gpt-image-2',
-    endpoint = 'https://api.evolink.ai/v1/images/generations',
-    refImages = []
+    endpoint = 'https://image.codesonline.dev/v1/images/generations',
+    refImages = [],
+    style,
+    responseFormat = 'url',
+    upscale
   } = opts;
 
-  const refs = (refImages || []).filter(Boolean).slice(0, 4);
+  // 检查登录
+  let accessToken = '';
+  if (supabase) {
+    const { data: { session } } = await supabase.auth.getSession();
+    accessToken = session?.access_token || '';
+  }
+
+  // 参考图转 base64（代理需要）
+  const refImagesB64 = [];
+  for (const file of (refImages || []).filter(Boolean).slice(0, 4)) {
+    const b64 = await fileToBase64(file);
+    refImagesB64.push({
+      filename: file.name,
+      content: b64.split(',')[1]  // 去掉 data:image/png;base64, 前缀
+    });
+  }
 
   try {
-    let resp;
+    const body = {
+      apiKey,
+      model,
+      prompt,
+      size,
+      quality,
+      style,
+      responseFormat,
+      endpoint,
+      refImages: refImagesB64
+    };
+    if (upscale) body.upscale = upscale;
 
-    if (refs.length > 0) {
-      // 图生图：multipart/form-data
-      const editUrl = endpoint.includes('/generations')
-        ? endpoint.replace('/generations', '/edits')
-        : endpoint;
-
-      const formData = new FormData();
-      formData.append('model', model);
-      formData.append('prompt', prompt);
-      formData.append('size', size);
-      refs.forEach((file, i) => {
-        formData.append(i === 0 ? 'image' : `image${i + 1}`, file);
-      });
-      refs.forEach(file => formData.append('image[]', file));
-
-      resp = await fetch(editUrl, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${apiKey}` },
-        body: formData
-      });
-    } else {
-      // 文生图：JSON
-      resp = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ model, prompt, size, quality, n: 1 })
-      });
-    }
-
-    if (!resp.ok) {
-      const data = await resp.json().catch(() => ({}));
-      let msg = data.error?.message || data.message || `HTTP ${resp.status}`;
-      if (resp.status === 401) msg = 'API Key 无效或已过期';
-      if (resp.status === 429) msg = '请求过频或额度不足';
-      return { ok: false, error: msg };
-    }
+    const resp = await fetch('/api/generate-image', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {})
+      },
+      body: JSON.stringify(body)
+    });
 
     const data = await resp.json().catch(() => ({}));
 
-    // 调试：打印真实返回（F12 Console 可见）
-    console.log('[AI 生图] 提交响应:', data);
-
-    // 模式 1：同步返回图片（OpenAI 风格 data[0].url / b64_json）
-    const syncImage = data.data?.[0] || data.images?.[0] || data.output?.[0];
-    if (syncImage) {
-      const imageUrl = typeof syncImage === 'string'
-        ? syncImage
-        : (syncImage.url || (syncImage.b64_json ? `data:image/png;base64,${syncImage.b64_json}` : null));
-      if (imageUrl) return { ok: true, imageUrl, raw: data };
+    if (!resp.ok) {
+      return { ok: false, error: data.error || `HTTP ${resp.status}` };
     }
 
-    // 模式 2：异步任务（EvoLink 风格，返回 task id）
-    const taskId = data.id || data.task_id || data.taskId;
-    if (taskId) {
-      // 从 endpoint 推导任务查询 URL
-      const base = endpoint.replace(/\/v1\/.*$/, '/v1');
-      const taskUrl = `${base}/tasks/${taskId}`;
-      console.log('[AI 生图] 异步任务 ID:', taskId, '查询 URL:', taskUrl);
-      return await pollTask(taskUrl, apiKey);
+    if (!data.ok || !data.imageUrl) {
+      return { ok: false, error: data.error || '未返回图片' };
     }
 
-    return { ok: false, error: 'API 返回数据格式异常，未找到图片或任务 ID', raw: data };
+    return { ok: true, imageUrl: data.imageUrl, raw: data.raw };
   } catch (err) {
-    return { ok: false, error: err.message || '网络错误' };
+    return { ok: false, error: err.message || '网络错误（代理请求失败）' };
   }
 }
 
-/**
- * 轮询任务状态直到完成或超时
- */
-async function pollTask(taskUrl, apiKey, opts = {}) {
-  const { maxAttempts = 60, intervalMs = 2000 } = opts;  // 最长 2 分钟
-
-  for (let i = 0; i < maxAttempts; i++) {
-    await new Promise(r => setTimeout(r, intervalMs));
-
-    const resp = await fetch(taskUrl, {
-      headers: { 'Authorization': `Bearer ${apiKey}` }
-    });
-
-    if (!resp.ok) {
-      const data = await resp.json().catch(() => ({}));
-      return { ok: false, error: `查询任务失败：${data.error?.message || resp.status}` };
-    }
-
-    const task = await resp.json().catch(() => ({}));
-
-    // 状态判断
-    const status = task.status;
-    if (status === 'completed' || status === 'succeeded') {
-      // 拿图片：output[].url 或 output[].b64_json 或 data[].url
-      const outputs = task.output || task.data || task.images || [];
-      const first = outputs[0];
-      if (first) {
-        const imageUrl = typeof first === 'string'
-          ? first
-          : (first.url || (first.b64_json ? `data:image/png;base64,${first.b64_json}` : null));
-        if (imageUrl) return { ok: true, imageUrl, raw: task };
-      }
-      return { ok: false, error: '任务完成但未返回图片', raw: task };
-    }
-
-    if (status === 'failed' || status === 'task_error' || status === 'error') {
-      const errMsg = task.error?.message || task.error?.code || '生成失败';
-      return { ok: false, error: errMsg, raw: task };
-    }
-
-    // pending / processing / queued 继续轮询
-  }
-
-  return { ok: false, error: '生成超时（超过 2 分钟）' };
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 /**

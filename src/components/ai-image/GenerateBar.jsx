@@ -131,11 +131,12 @@ export default function GenerateBar({ aiModels, selectedPrompt, onClearPrompt, o
     setResult(null);
 
     const r = await generateImage(selectedModel.apiKey, finalPrompt, {
-      size,
+      size: ratio,  // 直接传比例如 "16:9"，API 支持
       quality,
       model: selectedModel.model,
       endpoint: selectedModel.endpoint,
-      refImages: refImages  // 数组
+      refImages: refImages,
+      upscale: resolution === '2K' ? '2k' : resolution === '4K' ? '4k' : undefined
     });
 
     setResult(r);

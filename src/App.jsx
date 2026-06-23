@@ -45,7 +45,7 @@ function App() {
     compareMode, setCompareMode, compareMonth, setCompareMonth, compareProfitData,
     importMultipleCSV, deleteMonth, etsyData, reload,
     updateProductCosts, updateExchangeRate, updateConfigFields, updateAiModels,
-    quota,
+    quota, aiModels,
     isLoading, loadingData, error, setError
   } = useEtsyData();
 
@@ -332,7 +332,7 @@ function App() {
       }
 
       case 'ai-image':
-        return <AIImagePage aiModels={etsyData.config?.aiModels || []} />;
+        return <AIImagePage aiModels={aiModels} />;
 
       default:
         return null;
@@ -405,6 +405,7 @@ function App() {
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
         config={etsyData.config}
+        aiModels={aiModels}
         orders={allMonthsSummary?.allOrders || currentMonthData?.orders || []}
         onUpdateAiModels={updateAiModels}
         quota={quota}

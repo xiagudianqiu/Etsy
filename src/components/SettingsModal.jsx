@@ -12,7 +12,7 @@ const DEFAULT_PRODUCTS = {
   '32oz': 100
 };
 
-export default function SettingsModal({ isOpen, onClose, config, onSave, orders, onUpdateAiModels, quota }) {
+export default function SettingsModal({ isOpen, onClose, config, aiModels, onSave, orders, onUpdateAiModels, quota }) {
   const [products, setProducts] = useState({});
   const [newName, setNewName] = useState('');
   const [newCost, setNewCost] = useState('');
@@ -288,7 +288,7 @@ export default function SettingsModal({ isOpen, onClose, config, onSave, orders,
           </section>
 
           {/* ===== AI 生图模型配置 ===== */}
-          <AIImageSection config={config} onUpdateAiModels={onUpdateAiModels} />
+          <AIImageSection aiModels={aiModels} onUpdateAiModels={onUpdateAiModels} />
         </div>
 
         <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[var(--border)]">
@@ -326,8 +326,8 @@ const AI_PROVIDERS = [
   { key: 'custom', label: '自定义', defaultModel: '', defaultEndpoint: '', signupUrl: '' }
 ];
 
-function AIImageSection({ config, onUpdateAiModels }) {
-  const models = config?.aiModels || [];
+function AIImageSection({ aiModels, onUpdateAiModels }) {
+  const models = aiModels || [];
   const [editingId, setEditingId] = useState(null);
   const [draft, setDraft] = useState(null);
   const [showKey, setShowKey] = useState({});
