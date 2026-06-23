@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { Sparkles, Loader2, Image as ImageIcon, X, Upload, AlertCircle, Download, RefreshCw, ChevronUp, ChevronDown, Plus } from 'lucide-react';
 import { generateImage, fillPrompt } from '../../utils/evolinkApi';
+import { useGenContext } from '../../utils/GenProgressContext';
 
 const RESOLUTION_PRESETS = [
   { value: '1K', label: '1K', longEdge: 1024 },
@@ -59,8 +60,8 @@ export default function GenerateBar({ aiModels, selectedPrompt, onClearPrompt, o
   const [resolution, setResolution] = useState('1K');
   const size = calcSize(ratio, resolution);
   const [quality, setQuality] = useState('auto');
-  const [generating, setGenerating] = useState(false);
-  const [result, setResult] = useState(null);
+  const [promptRows, setPromptRows] = useState(4);  // 提示词输入框行数（可调）
+  const { generating, setGenerating, progressText, setProgressText, result, setResult } = useGenContext();
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(true);  // 栏子展开/收起
   const fileRef = useRef(null);
@@ -127,11 +128,12 @@ export default function GenerateBar({ aiModels, selectedPrompt, onClearPrompt, o
       return;
     }
     setGenerating(true);
+    setProgressText('提交任务...');
     setError('');
     setResult(null);
 
     const r = await generateImage(selectedModel.apiKey, finalPrompt, {
-      size: ratio,  // 直接传比例如 "16:9"，API 支持
+      size: ratio,
       quality,
       model: selectedModel.model,
       endpoint: selectedModel.endpoint,
@@ -140,6 +142,7 @@ export default function GenerateBar({ aiModels, selectedPrompt, onClearPrompt, o
     });
 
     setResult(r);
+    setGenerating(false);
     if (r.ok) {
       onGenerated?.({
         prompt: finalPrompt,
@@ -154,7 +157,6 @@ export default function GenerateBar({ aiModels, selectedPrompt, onClearPrompt, o
       setError(r.raw ? `${r.error} | 返回: ${JSON.stringify(r.raw).slice(0, 200)}` : r.error);
       console.log('[AI 生图] 失败详情:', r);
     }
-    setGenerating(false);
   };
 
   const handleDownload = () => {
@@ -345,13 +347,26 @@ export default function GenerateBar({ aiModels, selectedPrompt, onClearPrompt, o
               </div>
             )}
 
-            {/* 提示词输入框 */}
+            {/* 提示词输入框（可拖拽调整高度或点展开/收起） */}
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] text-[var(--text-tertiary)]">提示词</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPromptRows(r => Math.min(20, r + 3))}
+                  className="text-[10px] text-[var(--text-tertiary)] hover:text-[var(--gold-bright)]"
+                >展开</button>
+                <button
+                  onClick={() => setPromptRows(r => Math.max(2, r - 3))}
+                  className="text-[10px] text-[var(--text-tertiary)] hover:text-[var(--gold-bright)]"
+                >收起</button>
+              </div>
+            </div>
             <textarea
               value={useTemplate && selectedPrompt ? finalPrompt : (prompt || finalPrompt)}
               onChange={e => { setPrompt(e.target.value); setUseTemplate(false); }}
-              rows={2}
+              rows={promptRows}
               placeholder="输入提示词（英文效果更好），或从上方选择提示词模板..."
-              className="w-full px-2.5 py-2 rounded-md bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-primary)] text-xs font-mono outline-none focus:border-[var(--gold)] resize-none leading-relaxed"
+              className="w-full px-2.5 py-2 rounded-md bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-primary)] text-xs font-mono outline-none focus:border-[var(--gold)] resize-y min-h-[60px] leading-relaxed"
             />
 
             {/* 错误提示 */}

@@ -26,6 +26,8 @@ import { calculateProfit, calculateOrderProfit } from './utils/profitCalculator'
 import { sendCSVByEmail } from './utils/mailBackup';
 import { useAuth } from './hooks/useAuth';
 import { MoneyProvider } from './utils/MoneyContext';
+import { GenProvider } from './utils/GenProgressContext';
+import GenProgressBar from './components/ai-image/GenProgressBar';
 import { formatMoney } from './utils/currency';
 import { Sparkles, ArrowRight, FileText, FileDown } from 'lucide-react';
 
@@ -344,6 +346,7 @@ function App() {
       currency={etsyData.config?.displayCurrency || 'USD'}
       rates={etsyData.config?.rates}
     >
+    <GenProvider>
     <div className="min-h-screen text-[var(--text-primary)]">
       {/* 隐藏的 PDF 报表视图（仅导出时显示） */}
       {showPDFReport && hasData && (
@@ -382,6 +385,8 @@ function App() {
           displayCurrency={etsyData.config?.displayCurrency || 'USD'}
           onCurrencyChange={(c) => updateConfigFields({ displayCurrency: c })}
         />
+
+        <GenProgressBar />
 
         <main className="p-8 space-y-6">
           {showUploader && (
@@ -423,6 +428,7 @@ function App() {
       {/* PDF 导出进度遮罩 */}
       <PDFProgressOverlay progress={pdfProgress} />
     </div>
+    </GenProvider>
     </MoneyProvider>
   );
 }

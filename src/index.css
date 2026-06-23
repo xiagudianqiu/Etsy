@@ -348,6 +348,11 @@ body {
 }
 
 /* ========== 暖金滑块 ========== */
+@keyframes progressBar {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(0); }
+  100% { transform: translateX(100%); }
+}
 .slider-gold {
   -webkit-appearance: none;
   appearance: none;
