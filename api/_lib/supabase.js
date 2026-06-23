@@ -9,11 +9,12 @@ let _client = null;
 export function getSupabaseAdmin() {
   if (_client) return _client;
 
-  const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+  // Vercel function 里 VITE_ 前缀的变量不会注入，用不带前缀的
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !serviceKey) {
-    throw new Error('缺少 Supabase 配置：VITE_SUPABASE_URL 或 SUPABASE_SERVICE_ROLE_KEY');
+    throw new Error(`缺少 Supabase 配置：SUPABASE_URL=${!!url} SERVICE_ROLE_KEY=${!!serviceKey}`);
   }
 
   _client = createClient(url, serviceKey, {
