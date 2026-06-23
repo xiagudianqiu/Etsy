@@ -198,6 +198,11 @@ function App() {
   );
 
   const renderPage = () => {
+    // AI 生图不需要销售数据，独立判断
+    if (activePage === 'ai-image') {
+      return <AIImagePage aiModels={aiModels} />;
+    }
+
     if (!hasData) return <EmptyState />;
 
     switch (activePage) {
