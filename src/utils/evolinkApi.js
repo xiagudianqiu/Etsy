@@ -34,6 +34,7 @@ export async function generateImage(apiKey, prompt, opts = {}) {
     const { data: { session } } = await supabase.auth.getSession();
     accessToken = session?.access_token || '';
   }
+  // 注：代理不再需要验证身份（简化版）
 
   // 参考图转 base64（代理需要）
   const refImagesB64 = [];

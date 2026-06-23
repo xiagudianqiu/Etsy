@@ -1,19 +1,15 @@
 /**
- * Vercel Serverless Function: AI 生图代理
+ * Vercel Serverless Function: AI 生图代理（简化版，不依赖 Supabase 环境变量）
  *
- * 前端不能直接调 image.codesonline.dev（CORS 限制），
- * 通过这个代理转发请求。
+ * 前端不能直接调 image.codesonline.dev（CORS 限制），通过这个代理转发。
  *
  * POST /api/generate-image
- * Headers: Authorization: Bearer <supabase_access_token>
  * Body: {
  *   apiKey, model, prompt, size, quality, style, responseFormat,
- *   endpoint,  // 可选，默认 https://image.codesonline.dev/v1/images/generations
- *   refImages: [{ filename, content }]  // 可选，图生图（base64 数组）
+ *   endpoint,
+ *   refImages: [{ filename, content }]  // base64
  * }
  */
-import { getUserFromRequest } from './_lib/supabase.js';
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -22,10 +18,6 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    // 验证用户登录（防滥用）
-    const user = await getUserFromRequest(req);
-    if (!user) return res.status(401).json({ error: '未登录' });
-
     const {
       apiKey, model = 'gpt-image-2', prompt, size = '1:1',
       quality = 'high', style, responseFormat = 'url',
@@ -38,7 +30,7 @@ export default async function handler(req, res) {
 
     let apiResp;
 
-    if (refImages.length > 0) {
+    if (refImages && refImages.length > 0) {
       // 图生图：multipart/form-data → /v1/images/edits
       const editUrl = endpoint.replace('/generations', '/edits');
       const formData = new FormData();
