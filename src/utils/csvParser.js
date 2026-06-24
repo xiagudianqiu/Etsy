@@ -27,11 +27,10 @@ export function parseEtsyCSV(csvContent, filename) {
     fieldIndex[h] = i;
   });
 
-  // 从文件名提取月份（支持 etsy_statement_2026_4.csv、etsy_statement_2026_4 .csv、etsy_statement_202604.csv）
-  const monthMatch = filename.match(/(\d{4})_?\s*(\d{1,2})\s*\.csv$/i);
-  const monthKey = monthMatch ? `${monthMatch[1]}-${monthMatch[2].padStart(2, '0')}` : null;
-  const altMatch = filename.match(/(\d{4})(\d{2})\s*\.csv$/i);
-  const finalMonthKey = altMatch ? `${altMatch[1]}-${altMatch[2]}` : monthKey;
+  // 智能提取月份（容忍任意文件名格式）
+  let finalMonthKey = extractMonthFromFilename(filename);
+
+  // 如果文件名提取不到，后面从 CSV 内容的日期里推断
 
   // 按订单号分组
   const ordersMap = new Map();
@@ -217,6 +216,17 @@ export function parseEtsyCSV(csvContent, filename) {
     order.profit = order.net;
   });
 
+  // 如果文件名提取不到月份，从订单日期推断
+  if (!finalMonthKey) {
+    const orders = Array.from(ordersMap.values());
+    for (const o of orders) {
+      if (o.date) {
+        const m = o.date.match(/(\d{4})-(\d{2})/);
+        if (m) { finalMonthKey = `${m[1]}-${m[2]}`; break; }
+      }
+    }
+  }
+
   return {
     monthKey: finalMonthKey,
     filename,
@@ -224,6 +234,39 @@ export function parseEtsyCSV(csvContent, filename) {
     orders: Array.from(ordersMap.values()),
     summary
   };
+}
+
+/**
+ * 从文件名智能提取月份（容忍任意格式）
+ * 匹配规则（按优先级）：
+ *   1. 2026_4 / 2026_04 / 2026-4 → 2026-04
+ *   2. 202604 → 2026-04
+ *   3. 2026 4（空格分隔）→ 2026-04
+ *   4. 找不到返回 null（后面从 CSV 内容兜底）
+ */
+function extractMonthFromFilename(filename) {
+  if (!filename) return null;
+  const f = filename.replace(/\s+/g, ' ');  // 统一空格
+
+  // 优先：2026_4 或 2026-4 或 2026 4
+  let m = f.match(/(\d{4})[_\-\s](\d{1,2})(?:\D|$)/);
+  if (m) {
+    const month = parseInt(m[2]);
+    if (month >= 1 && month <= 12) {
+      return `${m[1]}-${String(month).padStart(2, '0')}`;
+    }
+  }
+
+  // 其次：202604（6位连续数字，前4位年，后2位月）
+  m = f.match(/(\d{4})(\d{2})(?:\D|$)/);
+  if (m) {
+    const month = parseInt(m[2]);
+    if (month >= 1 && month <= 12) {
+      return `${m[1]}-${m[2]}`;
+    }
+  }
+
+  return null;
 }
 
 /**
