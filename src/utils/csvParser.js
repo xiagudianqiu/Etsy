@@ -27,10 +27,10 @@ export function parseEtsyCSV(csvContent, filename) {
     fieldIndex[h] = i;
   });
 
-  // 从文件名提取月份（支持 etsy_statement_2026_4.csv 与 etsy_statement_202604.csv）
-  const monthMatch = filename.match(/(\d{4})_(\d{1,2})\.csv$/);
+  // 从文件名提取月份（支持 etsy_statement_2026_4.csv、etsy_statement_2026_4 .csv、etsy_statement_202604.csv）
+  const monthMatch = filename.match(/(\d{4})_?\s*(\d{1,2})\s*\.csv$/i);
   const monthKey = monthMatch ? `${monthMatch[1]}-${monthMatch[2].padStart(2, '0')}` : null;
-  const altMatch = filename.match(/(\d{4})(\d{2})\.csv$/);
+  const altMatch = filename.match(/(\d{4})(\d{2})\s*\.csv$/i);
   const finalMonthKey = altMatch ? `${altMatch[1]}-${altMatch[2]}` : monthKey;
 
   // 按订单号分组
